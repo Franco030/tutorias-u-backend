@@ -23,4 +23,5 @@ publish/
 Thumbs.db
 ehthumbs.db
 
-*appsettings.Local.json
+appsettings.Development.json
+appsettings.Local.json
