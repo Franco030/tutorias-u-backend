@@ -1,9 +1,31 @@
+using backend.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddCors(options =>
+{
+    /*
+    * Aqui va el CORS, las primeras dos son de desarrollo, en caso de que el frontend traiga otra URL,
+    * modifiquen las de localhost para que coincida el puerto (a veces pasa que se levanta en puertos distintos)
+    */
+    options.AddPolicy("FrontendPolicy", policy =>
+    {
+        policy.WithOrigins(
+            "http://localhost:5173", // Local Vite dev
+            "http://localhost:3000",
+            "https://tutorias-u-frontend.vercel.app/" // El que esta en produccion, este si no lo cambien
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddControllers();
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 var app = builder.Build();
@@ -16,8 +38,12 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("FrontendPolicy");
+
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/", () => "TutoriasU esta funcionando correctamente");
 
 app.Run();
