@@ -18,7 +18,7 @@ builder.Services.AddCors(options =>
         policy.WithOrigins(
             "http://localhost:5173", // Local Vite dev
             "http://localhost:3000",
-            "https://tutorias-u-frontend.vercel.app/" // El que esta en produccion, este si no lo cambien
+            "https://tutorias-u-frontend.vercel.app" // El que esta en produccion, este si no lo cambien
         )
         .AllowAnyHeader()
         .AllowAnyMethod();
