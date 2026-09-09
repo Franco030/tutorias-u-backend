@@ -8,3 +8,12 @@ Accept: application/json
 GET {{backend_HostAddress}}/weatherforecast
 
 ###
+
+POST {{backend_HostAddress}}/api/auth/google
+Content-Type: application/json
+
+{
+  "idToken": "token_falso"
+}
+
+###

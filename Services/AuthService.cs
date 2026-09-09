@@ -13,7 +13,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace backend.Services
 {
-    public interface AuthService : IAuthService
+    public class AuthService : IAuthService
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
