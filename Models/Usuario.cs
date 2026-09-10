@@ -20,4 +20,8 @@ public partial class Usuario
     public string? ProviderId { get; set; }
 
     public DateTime FechaRegistro { get; set; }
+
+    public string? PasswordHash { get; set; }
+
+    public bool IsEmailVerified { get; set; }
 }
