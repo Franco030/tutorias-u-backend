@@ -7,5 +7,8 @@ namespace backend.Services.Interfaces
     {
         Task<AuthResponseDto> LoginWithGoogleAsync(ExternalLoginDto dto);
         Task<AuthResponseDto> LoginWithMicrosoftAsync(ExternalLoginDto dto);
+        Task RegisterAsync(RegisterDto dto);
+        Task<AuthResponseDto> LoginWithEmailAsync(LoginDto dto);
+        Task VerifyEmailAsync(string verificationToken);
     }
 }
