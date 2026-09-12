@@ -29,6 +29,7 @@ namespace backend.Tests
             _mockConfig.Setup(c => c["Jwt:Key"]).Returns("LallaveSuperSecretaDePruebaQueDebeSerLarga12345");
             _mockConfig.Setup(c => c["Jwt:Issuer"]).Returns("TestIssuer");
             _mockConfig.Setup(c => c["Jwt:Audience"]).Returns("TestAudience");
+            _mockConfig.Setup(c => c["FrontendUrl"]).Returns("http://localhost:5173");
 
             // 3. Simular (Mockear) el servicio de correos para que no mande correos reales
             _mockEmailService = new Mock<IEmailService>();

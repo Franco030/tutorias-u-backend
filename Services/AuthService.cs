@@ -154,7 +154,7 @@ namespace backend.Services
 
             var tokenVerificacion = GenerateJwtToken(usuario);
 
-            var frontendUrl = _configuration["FrontendUrl"] ?? throw new InvalidOperationException("La variable FrontendUrl no esta configurada")
+            var frontendUrl = _configuration["FrontendUrl"] ?? throw new InvalidOperationException("La variable FrontendUrl no esta configurada");
 
             string link = $"{frontendUrl}/verificar-correo?token={tokenVerificacion}";
 
