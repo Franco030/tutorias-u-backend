@@ -154,10 +154,14 @@ namespace backend.Services
 
             var tokenVerificacion = GenerateJwtToken(usuario);
 
-            string link = $"http://localhost:5173/verificar-correo?token={tokenVerificacion}";
+            var frontendUrl = _configuration["FrontendUrl"] ?? throw new InvalidOperationException("La variable FrontendUrl no esta configurada")
+
+            string link = $"{frontendUrl}/verificar-correo?token={tokenVerificacion}";
+
             string html = $"<h2>Bienvenido a TutoriasU, {usuario.Nombre}!</h2>" +
                           $"<p>Por favor verifica tu cuenta haciendo clic en el siguiente enlace:</p>" +
                           $"<a href='{link}'>Verificar mi cuenta</a>";
+
 
             await _emailService.SendEmailAsync(usuario.Email, "Verifica tu cuenta - Tutoriasu", html);
         }
