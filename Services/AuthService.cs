@@ -64,7 +64,7 @@ namespace backend.Services
                     fotoUrl = payload.Picture;
                     subject = payload.Subject;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     throw new UnauthorizedAccessException("La Sesion de Google no es valida o ha expirado");
                 }
