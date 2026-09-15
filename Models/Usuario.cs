@@ -24,4 +24,8 @@ public partial class Usuario
     public string? PasswordHash { get; set; }
 
     public bool IsEmailVerified { get; set; }
+
+    public int EstadoAprobacionId { get; set; }
+
+    public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
 }
