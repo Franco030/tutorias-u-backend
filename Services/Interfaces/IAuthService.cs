@@ -10,5 +10,6 @@ namespace backend.Services.Interfaces
         Task RegisterAsync(RegisterDto dto);
         Task<AuthResponseDto> LoginWithEmailAsync(LoginDto dto);
         Task VerifyEmailAsync(string verificationToken);
+        Task<AuthResponseDto> AsignarRolAsync(int usuarioId, string nuevoRol);
     }
 }

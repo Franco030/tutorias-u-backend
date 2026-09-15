@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using backend.DTOs.Requests;
 using backend.Services.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace backend.Controllers;
 
@@ -102,6 +104,27 @@ public class AuthController : ControllerBase
 
             await _authService.VerifyEmailAsync(token);
             return Ok(new { message = "Correo verificado exitosamente. Ya puedes iniciar sesion" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("asignar-rol")]
+    [Authorize]
+    public async Task<IActionResult> AsignarRol([FromBody] AsignarRolRequestDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+            if (userIdClaim == null || !int.TryParse(userIdClaim, out int userId))
+                return Unauthorized(new { message = "Token invalido" });
+
+            var result = await _authService.AsignarRolAsync(userId, dto.NuevoRol);
+
+            return Ok(result);
         }
         catch (Exception ex)
         {

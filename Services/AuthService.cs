@@ -10,6 +10,7 @@ using backend.DTOs.Requests;
 using backend.DTOs.Responses;
 using backend.Models;
 using backend.Services.Interfaces;
+using backend.Enums;
 using System.ComponentModel.DataAnnotations;
 using System.Runtime.InteropServices;
 
@@ -145,7 +146,8 @@ namespace backend.Services
                 PasswordHash = passwordHash,
                 AuthProvider = "Local",
                 IsEmailVerified = false,
-                Rol = "Estudiante",
+                Rol = "Nuevo",
+                EstadoAprobacionId = (int)EstadoAprobacion.Ninguno,
                 FechaRegistro = DateTime.UtcNow
             };
 
@@ -241,7 +243,8 @@ namespace backend.Services
                     AuthProvider = authProvider,
                     ProviderId = providerId,
                     IsEmailVerified = true,
-                    Rol = "Estudiante",
+                    Rol = "Nuevo",
+                    EstadoAprobacionId = (int)EstadoAprobacion.Ninguno,
                     FechaRegistro = DateTime.UtcNow
                 };
 
@@ -286,6 +289,44 @@ namespace backend.Services
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        public async Task<AuthResponseDto> AsignarRolAsync(int usuarioId, string nuevoRol)
+        {
+            if (nuevoRol != "Estudiante" && nuevoRol != "Tutor" && nuevoRol != "Administrador")
+                throw new ArgumentException("No es un rol permitido por el sistema");
+
+            var usuario = await _context.Usuarios.FindAsync(usuarioId)
+                ?? throw new UnauthorizedAccessException("Usuario no encontrado");
+
+            usuario.Rol = nuevoRol;
+
+            if (nuevoRol == "Tutor")
+            {
+                usuario.EstadoAprobacionId = (int)EstadoAprobacion.Pendiente;
+            }
+            else if (nuevoRol == "Administrador")
+            {
+                usuario.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
+            }
+            else if (nuevoRol == "Estudiante")
+            {
+                usuario.EstadoAprobacionId = (int)EstadoAprobacion.Ninguno;
+            }
+
+            await _context.SaveChangesAsync();
+
+            var token = GenerateJwtToken(usuario);
+
+            return new AuthResponseDto
+            {
+                Token = token,
+                Id = usuario.Id,
+                Email = usuario.Email,
+                Nombre = usuario.Nombre,
+                Rol = usuario.Rol,
+                FotoUrl = usuario.FotoUrl
+            };
         }
     }
 }
