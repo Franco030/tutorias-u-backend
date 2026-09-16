@@ -15,6 +15,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IBlobService, BlobService>();
+builder.Services.AddAuthorization();
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (!string.IsNullOrEmpty(jwtKey))
