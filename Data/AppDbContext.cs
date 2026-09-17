@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -7,20 +7,16 @@ namespace backend.Data;
 
 public partial class AppDbContext : DbContext
 {
-    public AppDbContext()
-    {
-    }
-
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
     }
 
-    public virtual DbSet<EstadosAprobacion> EstadosAprobacion { get; set; }
+    public virtual DbSet<EstadosAprobacion> EstadosAprobacions { get; set; }
+
+    public virtual DbSet<Materia> Materias { get; set; }
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
-
-
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,6 +27,12 @@ public partial class AppDbContext : DbContext
             entity.ToTable("EstadosAprobacion");
 
             entity.Property(e => e.Estado).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<Materia>(entity =>
+        {
+            entity.Property(e => e.Categoria).HasMaxLength(100);
+            entity.Property(e => e.Nombre).HasMaxLength(100);
         });
 
         modelBuilder.Entity<Usuario>(entity =>
@@ -54,6 +56,23 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.EstadoAprobacionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Usuarios__EstadoAprobacionId");
+
+            entity.HasMany(d => d.Materia).WithMany(p => p.Estudiantes)
+                .UsingEntity<Dictionary<string, object>>(
+                    "EstudianteInterese",
+                    r => r.HasOne<Materia>().WithMany()
+                        .HasForeignKey("MateriaId")
+                        .OnDelete(DeleteBehavior.ClientSetNull)
+                        .HasConstraintName("FK_EstudianteIntereses_Materias"),
+                    l => l.HasOne<Usuario>().WithMany()
+                        .HasForeignKey("EstudianteId")
+                        .OnDelete(DeleteBehavior.ClientSetNull)
+                        .HasConstraintName("FK_EstudianteIntereses_Usuarios"),
+                    j =>
+                    {
+                        j.HasKey("EstudianteId", "MateriaId");
+                        j.ToTable("EstudianteIntereses");
+                    });
         });
 
         OnModelCreatingPartial(modelBuilder);
