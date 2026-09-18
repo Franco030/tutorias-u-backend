@@ -28,4 +28,6 @@ public partial class Usuario
     public int EstadoAprobacionId { get; set; }
 
     public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
+
+    public virtual ICollection<Materia> Materia { get; set; } = new List<Materia>();
 }
