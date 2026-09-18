@@ -27,7 +27,8 @@ public class MateriasController : ControllerBase
             {
                 Id = materia.Id,
                 Nombre = materia.Nombre,
-                Categoria = materia.Categoria
+                CategoriaId = materia.CategoriaId,
+                Categoria = materia.Categoria.Nombre
             })
             .ToListAsync(cancellationToken);
 
