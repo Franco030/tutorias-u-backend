@@ -1,6 +1,8 @@
 ﻿using System.Security.Claims;
+using Azure.Storage.Blobs.Models;
 using backend.Data;
 using backend.DTOs.Requests;
+using backend.DTOs.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -81,6 +83,8 @@ public class EstudiantesController : ControllerBase
             estudiante.Materia.Add(materia);
         }
 
+        estudiante.OnboardingCompleto = true;
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return Ok(new
@@ -88,5 +92,39 @@ public class EstudiantesController : ControllerBase
             message = "Intereses guardados correctamente.",
             materiaIds
         });
+
+    }
+
+    [HttpGet("intereses")]
+    public async Task<IActionResult> ObtenerIntereses(CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out int estudianteId))
+        {
+            return Unauthorized(new { message = "Token inválido." });
+        }
+
+        var estudiante = await _context.Usuarios
+            .Include(usuario => usuario.Materia)
+                .ThenInclude(materia => materia.Categoria)
+            .FirstOrDefaultAsync(
+                usuario => usuario.Id == estudianteId,
+                cancellationToken);
+
+        if (estudiante == null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        var intereses = estudiante.Materia.Select(m => new backend.DTOs.Responses.MateriaResponseDto
+        {
+            Id = m.Id,
+            Nombre = m.Nombre,
+            CategoriaId = m.CategoriaId,
+            Categoria = m.Categoria.Nombre
+        }).ToList();
+
+        return Ok(intereses);
     }
 }

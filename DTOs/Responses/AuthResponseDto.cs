@@ -1,4 +1,4 @@
-﻿namespace backend.DTOs.Responses
+namespace backend.DTOs.Responses
 {
     public class AuthResponseDto
     {
@@ -8,5 +8,6 @@
         public string Nombre { get; set; } = string.Empty;
         public string Rol { get; set; } = string.Empty;
         public string? FotoUrl { get; set; }
+        public bool OnboardingCompleto { get; set; }
     }
 }

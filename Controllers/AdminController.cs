@@ -26,7 +26,6 @@ public sealed class AdminController : ControllerBase
         var solicitudes = await _context.Usuarios
             .AsNoTracking()
             .Where(usuario =>
-                usuario.Rol == "Tutor" &&
                 usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente)
             .OrderBy(usuario => usuario.Id)
             .Select(usuario => new TutorSolicitudDto
@@ -49,7 +48,6 @@ public sealed class AdminController : ControllerBase
             .FirstOrDefaultAsync(
                 usuario =>
                     usuario.Id == id &&
-                    usuario.Rol == "Tutor" &&
                     usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente,
                 cancellationToken);
 
@@ -59,6 +57,7 @@ public sealed class AdminController : ControllerBase
         }
 
         tutor.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
+        tutor.Rol = "Tutor";
         await _context.SaveChangesAsync(cancellationToken);
 
         return NoContent();

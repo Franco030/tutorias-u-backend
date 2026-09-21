@@ -1,4 +1,4 @@
-锘縰sing System.IdentityModel.Tokens.Jwt;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -88,7 +88,8 @@ namespace backend.Services
                 Email = usuario.Email,
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
-                FotoUrl = fotoUrl
+                FotoUrl = fotoUrl,
+                OnboardingCompleto = usuario.OnboardingCompleto
             };
         }
 
@@ -97,7 +98,7 @@ namespace backend.Services
             var handler = new JwtSecurityTokenHandler();
             if (!handler.CanReadToken(dto.IdToken))
             {
-                throw new UnauthorizedAccessException("El token de Microsoft no tiene un formato v谩lido.");
+                throw new UnauthorizedAccessException("El token de Microsoft no tiene un formato v醠ido.");
             }
 
             var jwt = handler.ReadJwtToken(dto.IdToken);
@@ -128,7 +129,8 @@ namespace backend.Services
                 Email = usuario.Email,
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
-                FotoUrl = usuario.FotoUrl
+                FotoUrl = usuario.FotoUrl,
+                OnboardingCompleto = usuario.OnboardingCompleto
             };
         }
 
@@ -174,13 +176,13 @@ namespace backend.Services
                     ?? throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
             if (string.IsNullOrEmpty(usuario.PasswordHash))
-                throw new UnauthorizedAccessException("Esta cuenta fue creada con Google/Microsoft. Inicia sesi贸n con esos botones.");
+                throw new UnauthorizedAccessException("Esta cuenta fue creada con Google/Microsoft. Inicia sesi髇 con esos botones.");
 
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, usuario.PasswordHash))
                 throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
             if (!usuario.IsEmailVerified)
-                throw new UnauthorizedAccessException("Por favor verifica tu correo electr贸nico antes de iniciar sesi贸n.");
+                throw new UnauthorizedAccessException("Por favor verifica tu correo electr髇ico antes de iniciar sesi髇.");
 
             var token = GenerateJwtToken(usuario);
 
@@ -191,7 +193,8 @@ namespace backend.Services
                 Email = usuario.Email,
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
-                FotoUrl = usuario.FotoUrl
+                FotoUrl = usuario.FotoUrl,
+                OnboardingCompleto = usuario.OnboardingCompleto
             };
         }
 
@@ -225,7 +228,7 @@ namespace backend.Services
             }
             catch
             {
-                throw new Exception("El enlace de verificaci贸n no es v谩lido o ha expirado.");
+                throw new Exception("El enlace de verificaci髇 no es v醠ido o ha expirado.");
             }
         }
 
@@ -325,7 +328,8 @@ namespace backend.Services
                 Email = usuario.Email,
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
-                FotoUrl = usuario.FotoUrl
+                FotoUrl = usuario.FotoUrl,
+                OnboardingCompleto = usuario.OnboardingCompleto
             };
         }
     }
