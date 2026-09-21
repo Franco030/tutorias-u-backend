@@ -27,7 +27,11 @@ public partial class Usuario
 
     public int EstadoAprobacionId { get; set; }
 
+    public bool OnboardingCompleto { get; set; }
+
     public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
+
+    public virtual ICollection<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; } = new List<TutorSolicitudesCredenciale>();
 
     public virtual ICollection<Materia> Materia { get; set; } = new List<Materia>();
 }

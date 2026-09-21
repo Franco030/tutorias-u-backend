@@ -21,7 +21,7 @@ public class AdminControllerTests
                 Nombre = "Tutor pendiente",
                 Email = "pendiente@ejemplo.com",
                 PasswordHash = "hash-no-debe-exponerse",
-                Rol = "Tutor",
+                Rol = "Estudiante",
                 AuthProvider = "Local",
                 EstadoAprobacionId = (int)EstadoAprobacion.Pendiente
             },
@@ -65,7 +65,7 @@ public class AdminControllerTests
             Id = 10,
             Nombre = "Tutor",
             Email = "tutor@ejemplo.com",
-            Rol = "Tutor",
+            Rol = "Estudiante",
             AuthProvider = "Local",
             EstadoAprobacionId = (int)EstadoAprobacion.Pendiente
         });
@@ -74,9 +74,10 @@ public class AdminControllerTests
         var result = await new AdminController(context).AprobarTutor(10, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
-        Assert.Equal(
-            (int)EstadoAprobacion.Aprobado,
-            (await context.Usuarios.FindAsync(10))!.EstadoAprobacionId);
+        
+        var userInDb = await context.Usuarios.FindAsync(10);
+        Assert.Equal((int)EstadoAprobacion.Aprobado, userInDb!.EstadoAprobacionId);
+        Assert.Equal("Tutor", userInDb.Rol);
     }
 
     [Fact]

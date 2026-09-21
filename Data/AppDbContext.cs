@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -7,6 +7,10 @@ namespace backend.Data;
 
 public partial class AppDbContext : DbContext
 {
+    public AppDbContext()
+    {
+    }
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
@@ -18,7 +22,19 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Materia> Materias { get; set; }
 
+    public virtual DbSet<SolicitudMateria> SolicitudMaterias { get; set; }
+
+    public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
+
     public virtual DbSet<Usuario> Usuarios { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -46,6 +62,34 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.CategoriaId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Materias_Categorias");
+        });
+
+        modelBuilder.Entity<SolicitudMateria>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Solicitu__3214EC079F9AF643");
+
+            entity.HasOne(d => d.Materia).WithMany(p => p.SolicitudMateria)
+                .HasForeignKey(d => d.MateriaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SolicitudMaterias_Materias");
+
+            entity.HasOne(d => d.Solicitud).WithMany(p => p.SolicitudMateria)
+                .HasForeignKey(d => d.SolicitudId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SolicitudMaterias_Solicitudes");
+        });
+
+        modelBuilder.Entity<TutorSolicitudesCredenciale>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__TutorSol__3214EC076F132999");
+
+            entity.Property(e => e.FechaSolicitud).HasDefaultValueSql("(getdate())");
+            entity.Property(e => e.UrlCredencial).HasMaxLength(2048);
+
+            entity.HasOne(d => d.Usuario).WithMany(p => p.TutorSolicitudesCredenciales)
+                .HasForeignKey(d => d.UsuarioId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_TutorSolicitudes_Usuarios");
         });
 
         modelBuilder.Entity<Usuario>(entity =>
