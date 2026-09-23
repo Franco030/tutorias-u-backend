@@ -33,5 +33,7 @@ public partial class Usuario
 
     public virtual ICollection<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; } = new List<TutorSolicitudesCredenciale>();
 
+    public virtual ICollection<TutorMateria> TutorMaterias { get; set; } = new List<TutorMateria>();
+
     public virtual ICollection<Materia> Materia { get; set; } = new List<Materia>();
 }

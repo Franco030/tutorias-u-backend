@@ -15,5 +15,7 @@ public partial class Materia
 
     public virtual ICollection<SolicitudMateria> SolicitudMateria { get; set; } = new List<SolicitudMateria>();
 
+    public virtual ICollection<TutorMateria> TutorMaterias { get; set; } = new List<TutorMateria>();
+
     public virtual ICollection<Usuario> Estudiantes { get; set; } = new List<Usuario>();
 }

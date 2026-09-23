@@ -1,9 +1,11 @@
 using backend.Data;
 using backend.DTOs.Requests;
+using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace backend.Controllers
@@ -17,6 +19,39 @@ namespace backend.Controllers
         public TutoresController(AppDbContext context)
         {
             _context = context;
+        }
+
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult<TutorPerfilResponseDto>> ObtenerPerfil(int id)
+        {
+            var tutor = await _context.Usuarios
+                .AsNoTracking()
+                .Include(usuario => usuario.TutorMaterias)
+                    .ThenInclude(tutorMateria => tutorMateria.Materia)
+                .FirstOrDefaultAsync(usuario =>
+                    usuario.Id == id &&
+                    usuario.Rol == "Tutor" &&
+                    usuario.EstadoAprobacionId == (int)EstadoAprobacion.Aprobado);
+
+            if (tutor is null)
+            {
+                return NotFound();
+            }
+
+            return Ok(new TutorPerfilResponseDto
+            {
+                Id = tutor.Id,
+                Nombre = tutor.Nombre,
+                FotoUrl = tutor.FotoUrl,
+                Materias = tutor.TutorMaterias
+                    .Select(tutorMateria => new MateriaResponseDto
+                    {
+                        Id = tutorMateria.Materia.Id,
+                        Nombre = tutorMateria.Materia.Nombre,
+                        CategoriaId = tutorMateria.Materia.CategoriaId
+                    })
+                    .ToList()
+            });
         }
 
         [HttpPost("aplicar")]
