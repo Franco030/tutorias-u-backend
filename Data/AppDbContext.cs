@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -7,10 +7,6 @@ namespace backend.Data;
 
 public partial class AppDbContext : DbContext
 {
-    public AppDbContext()
-    {
-    }
-
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
@@ -27,14 +23,6 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
-        }
-    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,6 +87,9 @@ public partial class AppDbContext : DbContext
             entity.HasIndex(e => e.Email, "UQ__Usuarios__A9D105341BC20FE4").IsUnique();
 
             entity.Property(e => e.AuthProvider).HasMaxLength(50);
+            entity.Property(e => e.CalificacionPromedio)
+                .HasDefaultValue(0.00m)
+                .HasColumnType("decimal(3, 2)");
             entity.Property(e => e.Email).HasMaxLength(150);
             entity.Property(e => e.EstadoAprobacionId).HasDefaultValue(1, "DF__Usuarios__EstadoAprobacionId");
             entity.Property(e => e.FechaRegistro).HasDefaultValueSql("(getdate())");
@@ -129,6 +120,21 @@ public partial class AppDbContext : DbContext
                     {
                         j.HasKey("EstudianteId", "MateriaId");
                         j.ToTable("EstudianteIntereses");
+                    });
+
+            entity.HasMany(d => d.MateriaNavigation).WithMany(p => p.Tutors)
+                .UsingEntity<Dictionary<string, object>>(
+                    "TutorMateria",
+                    r => r.HasOne<Materia>().WithMany()
+                        .HasForeignKey("MateriaId")
+                        .HasConstraintName("FK_TutorMaterias_Materias"),
+                    l => l.HasOne<Usuario>().WithMany()
+                        .HasForeignKey("TutorId")
+                        .HasConstraintName("FK_TutorMaterias_Usuarios"),
+                    j =>
+                    {
+                        j.HasKey("TutorId", "MateriaId");
+                        j.ToTable("TutorMaterias");
                     });
         });
 

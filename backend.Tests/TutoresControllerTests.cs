@@ -32,7 +32,6 @@ namespace backend.Tests
         [Fact]
         public async Task Aplicar_DebeRetornarOk_CuandoDatosSonValidos()
         {
-            // a) Insertar un usuario de prueba en estado "Ninguno"
             var usuario = new Usuario
             {
                 Email = "tutor_candidato@ejemplo.com",
@@ -44,12 +43,10 @@ namespace backend.Tests
             _dbContext.Usuarios.Add(usuario);
             await _dbContext.SaveChangesAsync();
 
-            // b) Insertar una materia de prueba
-            var materia = new Materia { Nombre = "Física Avanzada", CategoriaId = 1 };
+            var materia = new Materia { Nombre = "Fisica Avanzada", CategoriaId = 1 };
             _dbContext.Materias.Add(materia);
             await _dbContext.SaveChangesAsync();
 
-            // c) Simular (Mockear) que el usuario está logueado inyectándole los Claims
             var userClaims = new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
             {
                     new Claim(ClaimTypes.NameIdentifier, usuario.Id.ToString())
@@ -60,33 +57,81 @@ namespace backend.Tests
                 HttpContext = new DefaultHttpContext { User = userClaims }
             };
 
-            // d) Crear el objeto JSON (DTO) que mandaría el Frontend
             var request = new AplicarTutorRequestDto
             {
                 UrlCredencial = "https://miscredenciales.com/mi-titulo.pdf",
                 MateriaIds = new List<int> { materia.Id }
             };
 
-            // Act (Ejecución)
             var result = await _controller.Aplicar(request);
 
-            // Assert (Verificación)
-
-            // 1. Verificar que la respuesta HTTP sea 200 OK
             Assert.IsType<OkObjectResult>(result);
 
-            // 2. Verificar que en la base de datos el estado de este usuario cambió a "Pendiente"
             var usuarioActualizado = await _dbContext.Usuarios.FindAsync(usuario.Id);
             Assert.Equal((int)EstadoAprobacion.Pendiente, usuarioActualizado.EstadoAprobacionId);
 
-            // 3. Verificar que se creó el registro de la solicitud y sus materias en la BD
             var solicitud = await _dbContext.TutorSolicitudesCredenciales
                                             .Include(s => s.SolicitudMateria)
                                             .FirstOrDefaultAsync(s => s.UsuarioId == usuario.Id);
 
             Assert.NotNull(solicitud);
             Assert.Equal(request.UrlCredencial, solicitud.UrlCredencial);
-            Assert.Single(solicitud.SolicitudMateria); // Validar que se guardó exactamente 1 materia
+            Assert.Single(solicitud.SolicitudMateria); 
+        }
+
+        [Fact]
+        public async Task GetTutorProfile_ReturnsOk_WhenTutorIsApproved()
+        {
+            var tutor = new Usuario
+            {
+                Email = "tutor_aprobado@ejemplo.com",
+                Nombre = "Profe Roberto",
+                Rol = "Tutor",
+                AuthProvider = "local",
+                EstadoAprobacionId = (int)EstadoAprobacion.Aprobado,
+                FotoUrl = "http://foto.com/rob.png",
+                CalificacionPromedio = 4.8m
+            };
+
+            var materia = new Materia { Nombre = "Fisica", CategoriaId = 1 };
+            
+            tutor.MateriaNavigation.Add(materia);
+            _dbContext.Usuarios.Add(tutor);
+            await _dbContext.SaveChangesAsync();
+
+            var result = await _controller.GetTutorProfile(tutor.Id);
+
+            var okResult = Assert.IsType<OkObjectResult>(result);
+            var responseDto = Assert.IsType<backend.DTOs.TutorPerfilResponseDto>(okResult.Value);
+
+            Assert.Equal(tutor.Id, responseDto.Id);
+            Assert.Equal("Profe Roberto", responseDto.Nombre);
+            Assert.Equal("http://foto.com/rob.png", responseDto.FotoUrl);
+            Assert.Equal(4.8m, responseDto.CalificacionPromedio);
+            Assert.Single(responseDto.Materias);
+            Assert.Contains("Fisica", responseDto.Materias);
+        }
+
+        [Fact]
+        public async Task GetTutorProfile_ReturnsNotFound_WhenTutorNotApprovedOrNotFound()
+        {
+            var tutorPendiente = new Usuario
+            {
+                Email = "tutor_pendiente@ejemplo.com",
+                Nombre = "Candidato a Profe",
+                Rol = "Tutor",
+                AuthProvider = "local",
+                EstadoAprobacionId = (int)EstadoAprobacion.Pendiente
+            };
+
+            _dbContext.Usuarios.Add(tutorPendiente);
+            await _dbContext.SaveChangesAsync();
+
+            var result = await _controller.GetTutorProfile(tutorPendiente.Id);
+            Assert.IsType<NotFoundObjectResult>(result);
+
+            var resultInexistente = await _controller.GetTutorProfile(999);
+            Assert.IsType<NotFoundObjectResult>(resultInexistente);
         }
     }
 }

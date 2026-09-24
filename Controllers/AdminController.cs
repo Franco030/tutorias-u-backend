@@ -45,6 +45,9 @@ public sealed class AdminController : ControllerBase
         CancellationToken cancellationToken)
     {
         var tutor = await _context.Usuarios
+            .Include(u => u.TutorSolicitudesCredenciales)
+                .ThenInclude(s => s.SolicitudMateria)
+            .Include(u => u.MateriaNavigation)
             .FirstOrDefaultAsync(
                 usuario =>
                     usuario.Id == id &&
@@ -58,6 +61,25 @@ public sealed class AdminController : ControllerBase
 
         tutor.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
         tutor.Rol = "Tutor";
+
+        // Obtener la solicitud más reciente
+        var ultimaSolicitud = tutor.TutorSolicitudesCredenciales
+            .OrderByDescending(s => s.FechaSolicitud)
+            .FirstOrDefault();
+
+        if (ultimaSolicitud != null)
+        {
+            // Migrar materias de la solicitud al catálogo activo del tutor
+            foreach (var solMat in ultimaSolicitud.SolicitudMateria)
+            {
+                var materia = await _context.Materias.FindAsync(new object[] { solMat.MateriaId }, cancellationToken);
+                if (materia != null && !tutor.MateriaNavigation.Any(m => m.Id == materia.Id))
+                {
+                    tutor.MateriaNavigation.Add(materia);
+                }
+            }
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return NoContent();
