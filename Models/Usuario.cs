@@ -29,9 +29,13 @@ public partial class Usuario
 
     public bool OnboardingCompleto { get; set; }
 
+    public decimal? CalificacionPromedio { get; set; }
+
     public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
 
     public virtual ICollection<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; } = new List<TutorSolicitudesCredenciale>();
 
     public virtual ICollection<Materia> Materia { get; set; } = new List<Materia>();
+
+    public virtual ICollection<Materia> MateriaNavigation { get; set; } = new List<Materia>();
 }
