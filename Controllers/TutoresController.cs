@@ -84,6 +84,67 @@ namespace backend.Controllers
             return Ok(tutores);
         }
 
+        [HttpGet("recomendados")]
+        [Authorize]
+        public async Task<IActionResult> GetRecommendedTutors(CancellationToken cancellationToken)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
+
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int estudianteId))
+            {
+                return Unauthorized(new { mensaje = "No se pudo identificar al estudiante autenticado en el token." });
+            }
+
+            var estudiante = await _context.Usuarios
+                .Where(usuario => usuario.Id == estudianteId)
+                .Select(usuario => new
+                {
+                    usuario.Rol,
+                    MateriaIds = usuario.Materia.Select(materia => materia.Id).ToList()
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (estudiante == null)
+            {
+                return NotFound(new { mensaje = "El estudiante no existe." });
+            }
+
+            if (estudiante.Rol != "Estudiante")
+            {
+                return BadRequest(new
+                {
+                    mensaje = "El usuario autenticado no tiene rol de Estudiante."
+                });
+            }
+
+            if (estudiante.MateriaIds.Count == 0)
+            {
+                return Ok(new List<backend.DTOs.TutorPerfilResponseDto>());
+            }
+
+            var tutoresRecomendados = await _context.Usuarios
+                .Where(usuario =>
+                    usuario.Rol == "Tutor" &&
+                    usuario.EstadoAprobacionId == (int)EstadoAprobacion.Aprobado &&
+                    usuario.MateriaNavigation.Any(materia =>
+                        estudiante.MateriaIds.Contains(materia.Id)))
+                .OrderByDescending(usuario => usuario.CalificacionPromedio)
+                .Take(10)
+                .Select(tutor => new backend.DTOs.TutorPerfilResponseDto
+                {
+                    Id = tutor.Id,
+                    Nombre = tutor.Nombre,
+                    FotoUrl = tutor.FotoUrl,
+                    CalificacionPromedio = tutor.CalificacionPromedio,
+                    Materias = tutor.MateriaNavigation
+                        .Select(materia => materia.Nombre)
+                        .ToList()
+                })
+                .ToListAsync(cancellationToken);
+
+            return Ok(tutoresRecomendados);
+        }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetTutorProfile(int id)
         {
