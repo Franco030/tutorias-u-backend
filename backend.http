@@ -17,3 +17,9 @@ Content-Type: application/json
 }
 
 ###
+
+GET {{backend_HostAddress}}/api/tutores/recomendados
+Authorization: Bearer {{jwtToken}}
+Accept: application/json
+
+###
