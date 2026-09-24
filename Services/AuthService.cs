@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+锘縰sing System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -89,7 +89,8 @@ namespace backend.Services
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
                 FotoUrl = fotoUrl,
-                OnboardingCompleto = usuario.OnboardingCompleto
+                OnboardingCompleto = usuario.OnboardingCompleto,
+                EstadoAprobacion = ((EstadoAprobacion)usuario.EstadoAprobacionId).ToString()
             };
         }
 
@@ -98,7 +99,7 @@ namespace backend.Services
             var handler = new JwtSecurityTokenHandler();
             if (!handler.CanReadToken(dto.IdToken))
             {
-                throw new UnauthorizedAccessException("El token de Microsoft no tiene un formato v醠ido.");
+                throw new UnauthorizedAccessException("El token de Microsoft no tiene un formato v谩lido.");
             }
 
             var jwt = handler.ReadJwtToken(dto.IdToken);
@@ -130,7 +131,8 @@ namespace backend.Services
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
                 FotoUrl = usuario.FotoUrl,
-                OnboardingCompleto = usuario.OnboardingCompleto
+                OnboardingCompleto = usuario.OnboardingCompleto,
+                EstadoAprobacion = ((EstadoAprobacion)usuario.EstadoAprobacionId).ToString()
             };
         }
 
@@ -176,13 +178,13 @@ namespace backend.Services
                     ?? throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
             if (string.IsNullOrEmpty(usuario.PasswordHash))
-                throw new UnauthorizedAccessException("Esta cuenta fue creada con Google/Microsoft. Inicia sesi髇 con esos botones.");
+                throw new UnauthorizedAccessException("Esta cuenta fue creada con Google/Microsoft. Inicia sesi贸n con esos botones.");
 
             if (!BCrypt.Net.BCrypt.Verify(dto.Password, usuario.PasswordHash))
                 throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
             if (!usuario.IsEmailVerified)
-                throw new UnauthorizedAccessException("Por favor verifica tu correo electr髇ico antes de iniciar sesi髇.");
+                throw new UnauthorizedAccessException("Por favor verifica tu correo electr贸nico antes de iniciar sesi贸n.");
 
             var token = GenerateJwtToken(usuario);
 
@@ -194,7 +196,8 @@ namespace backend.Services
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
                 FotoUrl = usuario.FotoUrl,
-                OnboardingCompleto = usuario.OnboardingCompleto
+                OnboardingCompleto = usuario.OnboardingCompleto,
+                EstadoAprobacion = ((EstadoAprobacion)usuario.EstadoAprobacionId).ToString()
             };
         }
 
@@ -228,7 +231,7 @@ namespace backend.Services
             }
             catch
             {
-                throw new Exception("El enlace de verificaci髇 no es v醠ido o ha expirado.");
+                throw new Exception("El enlace de verificaci贸n no es v谩lido o ha expirado.");
             }
         }
 
@@ -304,10 +307,7 @@ namespace backend.Services
 
             usuario.Rol = nuevoRol;
 
-            if (nuevoRol == "Tutor")
-            {
-                usuario.EstadoAprobacionId = (int)EstadoAprobacion.Pendiente;
-            }
+            if (nuevoRol == "Tutor") { usuario.EstadoAprobacionId = (int)EstadoAprobacion.Ninguno; }
             else if (nuevoRol == "Administrador")
             {
                 usuario.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
@@ -329,8 +329,11 @@ namespace backend.Services
                 Nombre = usuario.Nombre,
                 Rol = usuario.Rol,
                 FotoUrl = usuario.FotoUrl,
-                OnboardingCompleto = usuario.OnboardingCompleto
+                OnboardingCompleto = usuario.OnboardingCompleto,
+                EstadoAprobacion = ((EstadoAprobacion)usuario.EstadoAprobacionId).ToString()
             };
         }
     }
 }
+
+

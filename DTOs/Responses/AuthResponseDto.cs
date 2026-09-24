@@ -9,5 +9,6 @@ namespace backend.DTOs.Responses
         public string Rol { get; set; } = string.Empty;
         public string? FotoUrl { get; set; }
         public bool OnboardingCompleto { get; set; }
+        public string EstadoAprobacion { get; set; } = "Ninguno";
     }
 }
