@@ -31,6 +31,10 @@ public partial class Usuario
 
     public decimal? CalificacionPromedio { get; set; }
 
+    public virtual ICollection<Cita> CitaEstudiantes { get; set; } = new List<Cita>();
+
+    public virtual ICollection<Cita> CitaTutors { get; set; } = new List<Cita>();
+
     public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
 
     public virtual ICollection<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; } = new List<TutorSolicitudesCredenciale>();
