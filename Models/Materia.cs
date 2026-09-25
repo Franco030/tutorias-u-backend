@@ -13,6 +13,8 @@ public partial class Materia
 
     public virtual Categoria Categoria { get; set; } = null!;
 
+    public virtual ICollection<Cita> Cita { get; set; } = new List<Cita>();
+
     public virtual ICollection<SolicitudMateria> SolicitudMateria { get; set; } = new List<SolicitudMateria>();
 
     public virtual ICollection<Usuario> Estudiantes { get; set; } = new List<Usuario>();

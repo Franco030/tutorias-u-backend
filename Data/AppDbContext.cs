@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -7,12 +7,18 @@ namespace backend.Data;
 
 public partial class AppDbContext : DbContext
 {
+    public AppDbContext()
+    {
+    }
+
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
     }
 
     public virtual DbSet<Categoria> Categorias { get; set; }
+
+    public virtual DbSet<Cita> Citas { get; set; }
 
     public virtual DbSet<EstadosAprobacion> EstadosAprobacions { get; set; }
 
@@ -31,6 +37,34 @@ public partial class AppDbContext : DbContext
             entity.HasIndex(e => e.Nombre, "UQ_Categorias_Nombre").IsUnique();
 
             entity.Property(e => e.Nombre).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<Cita>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Citas__3214EC07B5DF2F7A");
+
+            entity.Property(e => e.Estado)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+            entity.Property(e => e.LinkReunion)
+                .HasMaxLength(255)
+                .IsUnicode(false);
+            entity.Property(e => e.Notas).IsUnicode(false);
+
+            entity.HasOne(d => d.Estudiante).WithMany(p => p.CitaEstudiantes)
+                .HasForeignKey(d => d.EstudianteId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Citas_Estudiante");
+
+            entity.HasOne(d => d.Materia).WithMany(p => p.Cita)
+                .HasForeignKey(d => d.MateriaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Citas_Materia");
+
+            entity.HasOne(d => d.Tutor).WithMany(p => p.CitaTutors)
+                .HasForeignKey(d => d.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Citas_Tutor");
         });
 
         modelBuilder.Entity<EstadosAprobacion>(entity =>
