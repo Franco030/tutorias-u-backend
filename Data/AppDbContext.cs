@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -26,11 +26,14 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SolicitudMateria> SolicitudMaterias { get; set; }
 
-    public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
-
     public virtual DbSet<TutorDisponibilidad> TutorDisponibilidads { get; set; }
 
+    public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
+
     public virtual DbSet<Usuario> Usuarios { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        => optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -103,6 +106,15 @@ public partial class AppDbContext : DbContext
                 .HasConstraintName("FK_SolicitudMaterias_Solicitudes");
         });
 
+        modelBuilder.Entity<TutorDisponibilidad>(entity =>
+        {
+            entity.ToTable("TutorDisponibilidad");
+
+            entity.HasOne(d => d.Tutor).WithMany(p => p.TutorDisponibilidads)
+                .HasForeignKey(d => d.TutorId)
+                .HasConstraintName("FK_TutorDisponibilidad_Usuarios");
+        });
+
         modelBuilder.Entity<TutorSolicitudesCredenciale>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__TutorSol__3214EC076F132999");
@@ -114,16 +126,6 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.UsuarioId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TutorSolicitudes_Usuarios");
-        });
-
-        modelBuilder.Entity<TutorDisponibilidad>(entity =>
-        {
-            entity.ToTable("TutorDisponibilidad");
-
-            entity.HasOne(disponibilidad => disponibilidad.Tutor)
-                .WithMany(tutor => tutor.TutorDisponibilidads)
-                .HasForeignKey(disponibilidad => disponibilidad.TutorId)
-                .HasConstraintName("FK_TutorDisponibilidad_Usuarios");
         });
 
         modelBuilder.Entity<Usuario>(entity =>
