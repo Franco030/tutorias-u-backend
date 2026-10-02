@@ -28,6 +28,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
 
+    public virtual DbSet<TutorDisponibilidad> TutorDisponibilidads { get; set; }
+
     public virtual DbSet<Usuario> Usuarios { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -112,6 +114,16 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.UsuarioId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_TutorSolicitudes_Usuarios");
+        });
+
+        modelBuilder.Entity<TutorDisponibilidad>(entity =>
+        {
+            entity.ToTable("TutorDisponibilidad");
+
+            entity.HasOne(disponibilidad => disponibilidad.Tutor)
+                .WithMany(tutor => tutor.TutorDisponibilidads)
+                .HasForeignKey(disponibilidad => disponibilidad.TutorId)
+                .HasConstraintName("FK_TutorDisponibilidad_Usuarios");
         });
 
         modelBuilder.Entity<Usuario>(entity =>
