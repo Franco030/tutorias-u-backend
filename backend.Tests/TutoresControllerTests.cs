@@ -1,5 +1,6 @@
 using backend.Controllers;
 using backend.Data;
+using backend.DTOs.Responses;
 using backend.DTOs.Requests;
 using backend.Models;
 using backend.Enums;
@@ -135,6 +136,116 @@ namespace backend.Tests
         }
 
         [Fact]
+        public async Task GuardarDisponibilidad_CreatesAndUpdatesTutorsWeekdayBlock()
+        {
+            var tutor = await AddTutorAsync();
+            SetAuthenticatedTutor(tutor.Id);
+
+            var createResult = await _controller.GuardarDisponibilidad(new List<DisponibilidadRequestDto>
+            {
+                new()
+                {
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(9, 0),
+                    HoraFin = new TimeOnly(12, 0)
+                },
+                new()
+                {
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(13, 0),
+                    HoraFin = new TimeOnly(14, 0)
+                }
+            });
+            var createdBlocks = Assert.IsType<List<DisponibilidadResponseDto>>(
+                Assert.IsType<OkObjectResult>(createResult).Value);
+            Assert.Equal(2, createdBlocks.Count);
+
+            var updateResult = await _controller.GuardarDisponibilidad(new List<DisponibilidadRequestDto>
+            {
+                new()
+                {
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(10, 0),
+                    HoraFin = new TimeOnly(13, 0)
+                }
+            });
+            var response = Assert.IsType<List<DisponibilidadResponseDto>>(
+                Assert.IsType<OkObjectResult>(updateResult).Value);
+
+            var block = Assert.Single(await _dbContext.TutorDisponibilidads.ToListAsync());
+            Assert.Equal(tutor.Id, block.TutorId);
+            Assert.Equal(new TimeOnly(10, 0), Assert.Single(response).HoraInicio);
+            Assert.Equal(new TimeOnly(13, 0), block.HoraFin);
+        }
+
+        [Fact]
+        public async Task GuardarDisponibilidad_ReturnsBadRequest_WhenBlockOverlapsExistingBlock()
+        {
+            var tutor = await AddTutorAsync();
+            SetAuthenticatedTutor(tutor.Id);
+            var existingBlock = new TutorDisponibilidad
+            {
+                TutorId = tutor.Id,
+                DiaSemana = (byte)DayOfWeek.Friday,
+                HoraInicio = new TimeOnly(9, 0),
+                HoraFin = new TimeOnly(10, 0)
+            };
+            _dbContext.TutorDisponibilidads.Add(existingBlock);
+            await _dbContext.SaveChangesAsync();
+
+            var result = await _controller.GuardarDisponibilidad(new List<DisponibilidadRequestDto>
+            {
+                new()
+                {
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(10, 30),
+                    HoraFin = new TimeOnly(11, 30)
+                },
+                new()
+                {
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(11, 0),
+                    HoraFin = new TimeOnly(12, 0)
+                }
+            });
+
+            Assert.IsType<BadRequestObjectResult>(result);
+            var savedBlock = Assert.Single(await _dbContext.TutorDisponibilidads.ToListAsync());
+            Assert.Equal(existingBlock.Id, savedBlock.Id);
+            Assert.Equal((byte)DayOfWeek.Friday, savedBlock.DiaSemana);
+        }
+
+        [Fact]
+        public async Task GetDisponibilidad_ReturnsTutorsAvailabilityInWeekdayOrder()
+        {
+            var tutor = await AddTutorAsync();
+            _dbContext.TutorDisponibilidads.AddRange(
+                new TutorDisponibilidad
+                {
+                    TutorId = tutor.Id,
+                    DiaSemana = (byte)DayOfWeek.Tuesday,
+                    HoraInicio = new TimeOnly(9, 0),
+                    HoraFin = new TimeOnly(10, 0)
+                },
+                new TutorDisponibilidad
+                {
+                    TutorId = tutor.Id,
+                    DiaSemana = (byte)DayOfWeek.Monday,
+                    HoraInicio = new TimeOnly(13, 0),
+                    HoraFin = new TimeOnly(14, 0)
+                });
+            await _dbContext.SaveChangesAsync();
+
+            var result = Assert.IsType<OkObjectResult>(
+                await _controller.GetDisponibilidad(tutor.Id));
+            var availability = Assert.IsType<List<DisponibilidadResponseDto>>(result.Value);
+
+            Assert.Equal(2, availability.Count);
+            Assert.Equal((byte)DayOfWeek.Monday, availability[0].DiaSemana);
+            Assert.Equal((byte)DayOfWeek.Tuesday, availability[1].DiaSemana);
+        }
+
+        [Fact]
         public async Task GetRecommendedTutors_ReturnsAtMostTenMatchingTutorsOrderedByRating()
         {
             var estudiante = new Usuario
@@ -212,6 +323,34 @@ namespace backend.Tests
             Assert.Equal(2, recommendations[^1].CalificacionPromedio);
             Assert.DoesNotContain(recommendations, tutor => tutor.Nombre == "Tutor no coincidente");
             Assert.DoesNotContain(recommendations, tutor => tutor.Nombre == "Tutor pendiente");
+        }
+
+        private async Task<Usuario> AddTutorAsync()
+        {
+            var tutor = new Usuario
+            {
+                Email = "disponibilidad_tutor@ejemplo.com",
+                Nombre = "Tutor de disponibilidad",
+                Rol = "Tutor",
+                AuthProvider = "local",
+                EstadoAprobacionId = (int)EstadoAprobacion.Aprobado
+            };
+            _dbContext.Usuarios.Add(tutor);
+            await _dbContext.SaveChangesAsync();
+            return tutor;
+        }
+
+        private void SetAuthenticatedTutor(int tutorId)
+        {
+            _controller.ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(
+                        new[] { new Claim(ClaimTypes.NameIdentifier, tutorId.ToString()) },
+                        "mock"))
+                }
+            };
         }
 
         [Fact]

@@ -30,10 +30,31 @@ public class CitasController : ControllerBase
             return BadRequest("No puedes agendar en el pasado");
         }
 
+        if (request.FechaHoraFin <= request.FechaHoraInicio ||
+            request.FechaHoraFin.Date != request.FechaHoraInicio.Date)
+        {
+            return BadRequest("El bloque de la cita no es válido");
+        }
+
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int estudianteId))
         {
             return Unauthorized();
+        }
+
+        var diaSemana = (byte)request.FechaHoraInicio.DayOfWeek;
+        var horaInicio = TimeOnly.FromDateTime(request.FechaHoraInicio);
+        var horaFin = TimeOnly.FromDateTime(request.FechaHoraFin);
+        var disponibilidadConfigurada = await _context.TutorDisponibilidads
+            .AnyAsync(disponibilidad =>
+                disponibilidad.TutorId == request.TutorId &&
+                disponibilidad.DiaSemana == diaSemana &&
+                disponibilidad.HoraInicio == horaInicio &&
+                disponibilidad.HoraFin == horaFin);
+
+        if (!disponibilidadConfigurada)
+        {
+            return BadRequest("El bloque solicitado no coincide con la disponibilidad del tutor");
         }
 
         var cita = new Cita
@@ -42,7 +63,7 @@ public class CitasController : ControllerBase
             TutorId = request.TutorId,
             MateriaId = request.MateriaId,
             FechaHoraInicio = request.FechaHoraInicio,
-            Estado = "Aceptada"
+            Estado = "Pendiente"
         };
 
         _context.Citas.Add(cita);

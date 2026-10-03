@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using backend.Models;
@@ -26,9 +26,19 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SolicitudMateria> SolicitudMaterias { get; set; }
 
+    public virtual DbSet<TutorDisponibilidad> TutorDisponibilidads { get; set; }
+
     public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -99,6 +109,15 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.SolicitudId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_SolicitudMaterias_Solicitudes");
+        });
+
+        modelBuilder.Entity<TutorDisponibilidad>(entity =>
+        {
+            entity.ToTable("TutorDisponibilidad");
+
+            entity.HasOne(d => d.Tutor).WithMany(p => p.TutorDisponibilidads)
+                .HasForeignKey(d => d.TutorId)
+                .HasConstraintName("FK_TutorDisponibilidad_Usuarios");
         });
 
         modelBuilder.Entity<TutorSolicitudesCredenciale>(entity =>

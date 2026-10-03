@@ -1,5 +1,6 @@
 using backend.Data;
 using backend.DTOs.Requests;
+using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -209,6 +210,101 @@ namespace backend.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { mensaje = "Materias actualizadas con éxito." });
+        }
+
+        [HttpPost("disponibilidad")]
+        [Authorize(Roles = "Tutor")]
+        public async Task<IActionResult> GuardarDisponibilidad([FromBody] List<DisponibilidadRequestDto> request)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int tutorId))
+            {
+                return Unauthorized(new { mensaje = "No se pudo identificar al tutor autenticado." });
+            }
+
+            var tutorExiste = await _context.Usuarios
+                .AnyAsync(usuario => usuario.Id == tutorId && usuario.Rol == "Tutor");
+            if (!tutorExiste)
+            {
+                return NotFound(new { mensaje = "Tutor no encontrado." });
+            }
+
+            for (var i = 0; i < request.Count; i++)
+            {
+                var bloque = request[i];
+                if (bloque.DiaSemana > 6)
+                {
+                    return BadRequest(new { mensaje = "El día de la semana debe estar entre 0 y 6." });
+                }
+
+                if (bloque.HoraFin <= bloque.HoraInicio)
+                {
+                    return BadRequest(new { mensaje = "La hora de fin debe ser posterior a la hora de inicio." });
+                }
+
+                for (var j = i + 1; j < request.Count; j++)
+                {
+                    var otroBloque = request[j];
+                    if (bloque.DiaSemana == otroBloque.DiaSemana &&
+                        bloque.HoraInicio < otroBloque.HoraFin &&
+                        bloque.HoraFin > otroBloque.HoraInicio)
+                    {
+                        return BadRequest(new { mensaje = "El horario se cruza con otro bloque de disponibilidad." });
+                    }
+                }
+            }
+
+            var disponibilidadActual = await _context.TutorDisponibilidads
+                .Where(disponibilidad => disponibilidad.TutorId == tutorId)
+                .ToListAsync();
+            _context.TutorDisponibilidads.RemoveRange(disponibilidadActual);
+            var disponibilidadNueva = request.Select(bloque => new TutorDisponibilidad
+            {
+                TutorId = tutorId,
+                DiaSemana = bloque.DiaSemana,
+                HoraInicio = bloque.HoraInicio,
+                HoraFin = bloque.HoraFin
+            }).ToList();
+            _context.TutorDisponibilidads.AddRange(disponibilidadNueva);
+            await _context.SaveChangesAsync();
+
+            return Ok(disponibilidadNueva
+                .OrderBy(bloque => bloque.DiaSemana)
+                .ThenBy(bloque => bloque.HoraInicio)
+                .Select(bloque => new DisponibilidadResponseDto
+                {
+                    Id = bloque.Id,
+                    DiaSemana = bloque.DiaSemana,
+                    HoraInicio = bloque.HoraInicio,
+                    HoraFin = bloque.HoraFin
+                })
+                .ToList());
+        }
+
+        [HttpGet("{id}/disponibilidad")]
+        public async Task<IActionResult> GetDisponibilidad(int id)
+        {
+            var tutorExiste = await _context.Usuarios
+                .AnyAsync(usuario => usuario.Id == id && usuario.Rol == "Tutor");
+            if (!tutorExiste)
+            {
+                return NotFound(new { mensaje = "Tutor no encontrado." });
+            }
+
+            var disponibilidades = await _context.TutorDisponibilidads
+                .Where(disponibilidad => disponibilidad.TutorId == id)
+                .OrderBy(disponibilidad => disponibilidad.DiaSemana)
+                .ThenBy(disponibilidad => disponibilidad.HoraInicio)
+                .Select(disponibilidad => new DisponibilidadResponseDto
+                {
+                    Id = disponibilidad.Id,
+                    DiaSemana = disponibilidad.DiaSemana,
+                    HoraInicio = disponibilidad.HoraInicio,
+                    HoraFin = disponibilidad.HoraFin
+                })
+                .ToListAsync();
+
+            return Ok(disponibilidades);
         }
     }
 }
