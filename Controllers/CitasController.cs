@@ -21,6 +21,32 @@ public class CitasController : ControllerBase
         _context = context;
     }
 
+    [HttpGet("pendientes")]
+    [Authorize(Roles = "Tutor")]
+    public async Task<IActionResult> ObtenerCitasPendientes()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
+        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int tutorId))
+        {
+            return Unauthorized();
+        }
+
+        var citasPendientes = await _context.Citas
+            .Include(cita => cita.Estudiante)
+            .Include(cita => cita.Materia)
+            .Where(cita => cita.TutorId == tutorId && cita.Estado == "Pendiente")
+            .Select(cita => new CitaPendienteResponseDto
+            {
+                CitaId = cita.Id,
+                AlumnoNombre = cita.Estudiante.Nombre,
+                MateriaNombre = cita.Materia.Nombre,
+                FechaHoraInicio = cita.FechaHoraInicio
+            })
+            .ToListAsync();
+
+        return Ok(citasPendientes);
+    }
+
     [HttpPost("agendar")]
     [Authorize(Roles = "Estudiante")]
     public async Task<IActionResult> AgendarCita([FromBody] CrearCitaRequestDto request)

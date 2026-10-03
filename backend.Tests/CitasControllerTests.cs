@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 using backend.Controllers;
@@ -21,6 +22,85 @@ public class CitasControllerTests
             .Options;
 
         return new AppDbContext(options);
+    }
+
+    [Fact]
+    public async Task ObtenerCitasPendientes_ReturnsOnlyPendingCitasForAuthenticatedTutor()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        var fechaHoraInicio = new DateTime(2026, 10, 5, 15, 0, 0, DateTimeKind.Utc);
+        var estudiante = new Usuario
+        {
+            Id = 1,
+            Email = "estudiante@example.com",
+            Nombre = "Ana Estudiante",
+            Rol = "Estudiante",
+            AuthProvider = "Local"
+        };
+        var otraEstudiante = new Usuario
+        {
+            Id = 2,
+            Email = "otro@example.com",
+            Nombre = "Otro Estudiante",
+            Rol = "Estudiante",
+            AuthProvider = "Local"
+        };
+        var materia = new Materia { Id = 1, Nombre = "Matemáticas" };
+        var otraMateria = new Materia { Id = 2, Nombre = "Física" };
+
+        context.Citas.AddRange(
+            new Cita
+            {
+                Id = 10,
+                TutorId = 7,
+                EstudianteId = estudiante.Id,
+                MateriaId = materia.Id,
+                Estado = "Pendiente",
+                FechaHoraInicio = fechaHoraInicio,
+                Estudiante = estudiante,
+                Materia = materia
+            },
+            new Cita
+            {
+                Id = 11,
+                TutorId = 7,
+                EstudianteId = otraEstudiante.Id,
+                MateriaId = otraMateria.Id,
+                Estado = "Aceptada",
+                FechaHoraInicio = fechaHoraInicio.AddHours(1),
+                Estudiante = otraEstudiante,
+                Materia = otraMateria
+            },
+            new Cita
+            {
+                Id = 12,
+                TutorId = 8,
+                EstudianteId = otraEstudiante.Id,
+                MateriaId = otraMateria.Id,
+                Estado = "Pendiente",
+                FechaHoraInicio = fechaHoraInicio.AddHours(2),
+                Estudiante = otraEstudiante,
+                Materia = otraMateria
+            });
+        await context.SaveChangesAsync();
+
+        var controller = CreateController(context, "7");
+        var authorizeAttribute = typeof(CitasController)
+            .GetMethod(nameof(CitasController.ObtenerCitasPendientes))!
+            .GetCustomAttributes(typeof(AuthorizeAttribute), false)
+            .Cast<AuthorizeAttribute>()
+            .Single();
+
+        var result = await controller.ObtenerCitasPendientes();
+
+        Assert.Equal("Tutor", authorizeAttribute.Roles);
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var citas = Assert.IsAssignableFrom<List<CitaPendienteResponseDto>>(okResult.Value);
+        var cita = Assert.Single(citas);
+        Assert.Equal(10, cita.CitaId);
+        Assert.Equal("Ana Estudiante", cita.AlumnoNombre);
+        Assert.Equal("Matemáticas", cita.MateriaNombre);
+        Assert.Equal(fechaHoraInicio, cita.FechaHoraInicio);
     }
 
     [Fact]
