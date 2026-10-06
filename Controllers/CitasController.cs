@@ -130,4 +130,37 @@ public class CitasController : ControllerBase
 
         return Ok(new { Mensaje = "Cita rechazada" });
     }
+
+    [HttpGet("pendientes")]
+    [Authorize(Roles = "Tutor")]
+    public async Task<ActionResult<IReadOnlyList<CitaPendienteResponseDto>>> ObtenerPendientes()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) ||
+            !int.TryParse(userIdClaim, out int tutorId))
+        {
+            return Unauthorized();
+        }
+
+        var citas = await _context.Citas
+            .AsNoTracking()
+            .Where(cita =>
+                cita.TutorId == tutorId &&
+                cita.Estado == "Pendiente")
+            .OrderBy(cita => cita.FechaHoraInicio)
+            .Select(cita => new CitaPendienteResponseDto
+            {
+                Id = cita.Id,
+                EstudianteId = cita.EstudianteId,
+                EstudianteNombre = cita.Estudiante.Nombre,
+                MateriaId = cita.MateriaId,
+                MateriaNombre = cita.Materia.Nombre,
+                FechaHoraInicio = cita.FechaHoraInicio,
+                Estado = cita.Estado
+            })
+            .ToListAsync();
+
+        return Ok(citas);
+    }
 }
