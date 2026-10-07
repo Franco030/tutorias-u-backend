@@ -72,4 +72,95 @@ public class CitasController : ControllerBase
         return Created("", new { Mensaje = "Cita agendada exitosamente", CitaId = cita.Id });
         
     }
+
+    [HttpPut("{id}/aceptar")]
+    [Authorize(Roles = "Tutor")]
+    public async Task<IActionResult> AceptarCita(int id, [FromBody] AceptarCitaRequestDto request)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
+        {
+            return Unauthorized();
+        }
+
+        var cita = await _context.Citas.FindAsync(id);
+        if (cita == null)
+        {
+            return NotFound();
+        }
+
+        if (cita.TutorId != tutorId)
+        {
+            return Forbid();
+        }
+
+        cita.Estado = "Aceptada";
+        cita.LinkReunion = request.LinkReunion;
+        cita.Notas = request.Notas;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Mensaje = "Cita aceptada" });
+    }
+
+    [HttpPut("{id}/rechazar")]
+    [Authorize(Roles = "Tutor")]
+    public async Task<IActionResult> RechazarCita(int id)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
+        {
+            return Unauthorized();
+        }
+
+        var cita = await _context.Citas.FindAsync(id);
+        if (cita == null)
+        {
+            return NotFound();
+        }
+
+        if (cita.TutorId != tutorId)
+        {
+            return Forbid();
+        }
+
+        cita.Estado = "Rechazada";
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new { Mensaje = "Cita rechazada" });
+    }
+
+    [HttpGet("pendientes")]
+    [Authorize(Roles = "Tutor")]
+    public async Task<ActionResult<IReadOnlyList<CitaPendienteResponseDto>>> ObtenerPendientes()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) ||
+            !int.TryParse(userIdClaim, out int tutorId))
+        {
+            return Unauthorized();
+        }
+
+        var citas = await _context.Citas
+            .AsNoTracking()
+            .Where(cita =>
+                cita.TutorId == tutorId &&
+                cita.Estado == "Pendiente")
+            .OrderBy(cita => cita.FechaHoraInicio)
+            .Select(cita => new CitaPendienteResponseDto
+            {
+                Id = cita.Id,
+                EstudianteId = cita.EstudianteId,
+                EstudianteNombre = cita.Estudiante.Nombre,
+                MateriaId = cita.MateriaId,
+                MateriaNombre = cita.Materia.Nombre,
+                FechaHoraInicio = cita.FechaHoraInicio,
+                Estado = cita.Estado
+            })
+            .ToListAsync();
+
+        return Ok(citas);
+    }
 }
