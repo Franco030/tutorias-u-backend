@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using backend.Data;
 using backend.Models;
 using backend.DTOs.Citas;
+using backend.DTOs.Responses;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
@@ -70,7 +71,6 @@ public class CitasController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Created("", new { Mensaje = "Cita agendada exitosamente", CitaId = cita.Id });
-        
     }
 
     [HttpPut("{id}/aceptar")]
@@ -162,5 +162,65 @@ public class CitasController : ControllerBase
             .ToListAsync();
 
         return Ok(citas);
+    }
+
+    [HttpGet("proximas")]
+    [Authorize]
+    public async Task<IActionResult> ObtenerProximasCitas()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                       ?? User.FindFirst("sub")?.Value;
+
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value
+                    ?? User.FindFirst("role")?.Value;
+
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+        {
+            return Unauthorized(new { mensaje = "Usuario no autorizado o token inválido." });
+        }
+
+        var ahoraUtc = DateTime.UtcNow;
+
+        IQueryable<ProximaCitaResponseDto> query;
+
+        if (userRole == "Estudiante")
+        {
+            query = _context.Citas
+                .AsNoTracking()
+                .Where(c => c.EstudianteId == userId && c.Estado == "Aceptada" && c.FechaHoraInicio >= ahoraUtc)
+                .OrderBy(c => c.FechaHoraInicio)
+                .Select(c => new ProximaCitaResponseDto
+                {
+                    Id = c.Id,
+                    RolOpuestoNombre = c.Tutor.Nombre,
+                    Materia = c.Materia.Nombre,
+                    FechaHoraInicio = c.FechaHoraInicio,
+                    LinkReunion = c.LinkReunion,
+                    Notas = c.Notas
+                });
+        }
+        else if (userRole == "Tutor")
+        {
+            query = _context.Citas
+                .AsNoTracking()
+                .Where(c => c.TutorId == userId && c.Estado == "Aceptada" && c.FechaHoraInicio >= ahoraUtc)
+                .OrderBy(c => c.FechaHoraInicio)
+                .Select(c => new ProximaCitaResponseDto
+                {
+                    Id = c.Id,
+                    RolOpuestoNombre = c.Estudiante.Nombre,
+                    Materia = c.Materia.Nombre,
+                    FechaHoraInicio = c.FechaHoraInicio,
+                    LinkReunion = c.LinkReunion,
+                    Notas = c.Notas
+                });
+        }
+        else
+        {
+            return Forbid();
+        }
+
+        var proximasCitas = await query.ToListAsync();
+        return Ok(proximasCitas);
     }
 }
