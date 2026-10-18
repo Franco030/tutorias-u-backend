@@ -1,0 +1,26 @@
+@backend_HostAddress = https://localhost:7141
+@token = token_de_prueba
+
+### Horarios ocupados del tutor en una fecha
+GET {{backend_HostAddress}}/api/citas/ocupadas?tutorId=2&fecha=2026-10-19
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Cancelar una tutoría pendiente o aceptada
+PUT {{backend_HostAddress}}/api/citas/12/cancelar
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "motivo": "Imprevisto personal"
+}
+
+### Consultar el historial de tutorías
+GET {{backend_HostAddress}}/api/citas/historial
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### Marcar una tutoría como completada (rol Tutor)
+PUT {{backend_HostAddress}}/api/citas/12/completar
+Authorization: Bearer {{token}}
+Accept: application/json
