@@ -8,5 +8,6 @@
         public DateTime FechaHoraInicio { get; set; }
         public string? LinkReunion { get; set; }
         public string? Notas { get; set; }
+        public string Estado { get; set; } = string.Empty;
     }
 }

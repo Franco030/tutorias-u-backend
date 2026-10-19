@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Xunit;
 using backend.Controllers;
 using backend.Data;
+using backend.DTOs.Responses;
 using backend.Models;
 using backend.DTOs.Citas;
 
@@ -248,6 +249,205 @@ public class CitasControllerTests
     }
 
     [Fact]
+    public async Task AgendarCita_TutorAlreadyHasCommitment_ReturnsBadRequest()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        var inicio = NextWeekday(DateTime.UtcNow, DayOfWeek.Monday).AddHours(10);
+        context.TutorDisponibilidads.Add(new TutorDisponibilidad
+        {
+            TutorId = 2,
+            DiaSemana = (byte)inicio.DayOfWeek,
+            HoraInicio = TimeOnly.FromDateTime(inicio),
+            HoraFin = TimeOnly.FromDateTime(inicio.AddHours(1))
+        });
+        context.Citas.Add(new Cita
+        {
+            TutorId = 2,
+            EstudianteId = 9,
+            MateriaId = 3,
+            FechaHoraInicio = inicio,
+            Estado = "Pendiente"
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateController(context, "1").AgendarCita(new CrearCitaRequestDto
+        {
+            TutorId = 2,
+            MateriaId = 3,
+            FechaHoraInicio = inicio,
+            FechaHoraFin = inicio.AddHours(1)
+        });
+
+        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Equal("El tutor ya tiene un compromiso en este horario", badRequest.Value);
+        Assert.Single(await context.Citas.ToListAsync());
+    }
+
+    [Fact]
+    public async Task AgendarCita_StudentAlreadyHasCommitmentWithAnotherTutor_ReturnsBadRequest()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        var inicio = NextWeekday(DateTime.UtcNow, DayOfWeek.Monday).AddHours(10);
+        context.TutorDisponibilidads.Add(new TutorDisponibilidad
+        {
+            TutorId = 2,
+            DiaSemana = (byte)inicio.DayOfWeek,
+            HoraInicio = TimeOnly.FromDateTime(inicio),
+            HoraFin = TimeOnly.FromDateTime(inicio.AddHours(1))
+        });
+        context.Citas.Add(new Cita
+        {
+            TutorId = 8,
+            EstudianteId = 1,
+            MateriaId = 3,
+            FechaHoraInicio = inicio,
+            Estado = "Aceptada"
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateController(context, "1").AgendarCita(new CrearCitaRequestDto
+        {
+            TutorId = 2,
+            MateriaId = 3,
+            FechaHoraInicio = inicio,
+            FechaHoraFin = inicio.AddHours(1)
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+        Assert.Single(await context.Citas.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CancelarCita_UserCanCancelAndReasonIsPreserved()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        context.Citas.Add(new Cita
+        {
+            Id = 40,
+            TutorId = 7,
+            EstudianteId = 1,
+            MateriaId = 1,
+            Estado = "Aceptada",
+            FechaHoraInicio = DateTime.UtcNow.AddDays(2),
+            Notas = "Notas de sesión"
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateController(context, "1").CancelarCita(
+            40,
+            new CancelarCitaRequestDto { Motivo = "Imprevisto familiar" });
+
+        Assert.IsType<OkObjectResult>(result);
+        var cita = await context.Citas.FindAsync(40);
+        Assert.NotNull(cita);
+        Assert.Equal("Cancelada", cita.Estado);
+        Assert.Contains("Motivo de cancelación: Imprevisto familiar", cita.Notas);
+    }
+
+    [Fact]
+    public async Task CancelarCita_NonParticipantIsForbidden()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        context.Citas.Add(new Cita
+        {
+            Id = 41,
+            TutorId = 7,
+            EstudianteId = 1,
+            MateriaId = 1,
+            Estado = "Pendiente",
+            FechaHoraInicio = DateTime.UtcNow.AddDays(2)
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateController(context, "9").CancelarCita(
+            41,
+            new CancelarCitaRequestDto());
+
+        Assert.IsType<ForbidResult>(result);
+        Assert.Equal("Pendiente", (await context.Citas.FindAsync(41))!.Estado);
+    }
+
+    [Fact]
+    public async Task ObtenerHistorial_MarksPastAcceptedCitaAsCompleted()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        var estudiante = new Usuario
+        {
+            Id = 1,
+            Nombre = "Ana",
+            Email = "ana@example.com",
+            Rol = "Estudiante",
+            AuthProvider = "Local"
+        };
+        var tutor = new Usuario
+        {
+            Id = 7,
+            Nombre = "Tutor",
+            Email = "tutor@example.com",
+            Rol = "Tutor",
+            AuthProvider = "Local"
+        };
+        var materia = new Materia { Id = 1, Nombre = "Matemáticas" };
+        context.Citas.AddRange(
+            new Cita
+            {
+                Id = 42,
+                TutorId = 7,
+                EstudianteId = 1,
+                MateriaId = 1,
+                Estado = "Aceptada",
+                FechaHoraInicio = DateTime.UtcNow.AddHours(-2),
+                Estudiante = estudiante,
+                Tutor = tutor,
+                Materia = materia
+            },
+            new Cita
+            {
+                Id = 43,
+                TutorId = 7,
+                EstudianteId = 1,
+                MateriaId = 1,
+                Estado = "Cancelada",
+                FechaHoraInicio = DateTime.UtcNow.AddDays(1),
+                Estudiante = estudiante,
+                Tutor = tutor,
+                Materia = materia
+            });
+        await context.SaveChangesAsync();
+
+        var controller = CreateController(context, "1", "Estudiante");
+        var result = await controller.ObtenerHistorial();
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var citas = Assert.IsAssignableFrom<IReadOnlyList<ProximaCitaResponseDto>>(okResult.Value);
+        Assert.Equal(2, citas.Count);
+        Assert.Equal("Cancelada", citas[0].Estado);
+        Assert.Equal("Completada", citas[1].Estado);
+        Assert.Equal("Completada", (await context.Citas.FindAsync(42))!.Estado);
+    }
+
+    [Fact]
+    public async Task CompletarCita_TutorMarksAcceptedCitaAsCompleted()
+    {
+        var context = GetDbContext(Guid.NewGuid().ToString());
+        context.Citas.Add(new Cita
+        {
+            Id = 44,
+            TutorId = 7,
+            EstudianteId = 1,
+            MateriaId = 1,
+            Estado = "Aceptada",
+            FechaHoraInicio = DateTime.UtcNow.AddDays(1)
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateController(context, "7").CompletarCita(44);
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal("Completada", (await context.Citas.FindAsync(44))!.Estado);
+    }
+
+    [Fact]
     public async Task AceptarCita_ValidRequest_UpdatesCita()
     {
         // Arrange
@@ -474,12 +674,15 @@ public class CitasControllerTests
         Assert.Equal("Tutor", authorizeAttribute.Roles);
     }
 
-    private static CitasController CreateController(AppDbContext context, string userId)
+    private static CitasController CreateController(AppDbContext context, string userId, string? role = null)
     {
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, userId) };
+        if (role != null)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
         var controller = new CitasController(context);
-        var user = new ClaimsPrincipal(new ClaimsIdentity(
-            new[] { new Claim(ClaimTypes.NameIdentifier, userId) },
-            "mock"));
+        var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "mock"));
         controller.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext { User = user }
