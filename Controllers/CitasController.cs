@@ -4,7 +4,9 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using backend.Authorization;
 using backend.Data;
+using backend.Enums;
 using backend.Models;
 using backend.DTOs.Citas;
 using backend.DTOs.Responses;
@@ -107,6 +109,28 @@ public class CitasController : ControllerBase
             return Problem(statusCode: 400, title: "El tutor ya tiene un compromiso en este horario");
         }
 
+        // Solo con un tutor aprobado y en una materia que imparte.
+        var tutor = await _context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.Id == request.TutorId)
+            .Select(usuario => new
+            {
+                usuario.Rol,
+                usuario.EstadoAprobacionId,
+                ImparteMateria = usuario.MateriaNavigation.Any(materia => materia.Id == request.MateriaId)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tutor == null || tutor.Rol != "Tutor" || tutor.EstadoAprobacionId != (int)EstadoAprobacion.Aprobado)
+        {
+            return Problem(statusCode: 400, title: "El tutor no está disponible para agendar.");
+        }
+
+        if (!tutor.ImparteMateria)
+        {
+            return Problem(statusCode: 400, title: "El tutor no imparte esa materia.");
+        }
+
         var diaSemana = (byte)fechaHoraInicio.DayOfWeek;
         var horaInicio = TimeOnly.FromDateTime(fechaHoraInicio);
         var horaFin = TimeOnly.FromDateTime(fechaHoraFin);
@@ -150,7 +174,7 @@ public class CitasController : ControllerBase
     }
 
     [HttpPut("{id}/aceptar")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<IActionResult> AceptarCita(
         int id,
         [FromBody] AceptarCitaRequestDto request,
@@ -173,22 +197,40 @@ public class CitasController : ControllerBase
             return Forbid();
         }
 
+        // Solo se acepta una solicitud pendiente y que todavía no ocurre: una
+        // cancelada o rechazada no se puede reactivar (su horario pudo ocuparse).
+        if (cita.Estado != "Pendiente")
+        {
+            return Problem(statusCode: 409, title: "Solo se pueden aceptar solicitudes pendientes.");
+        }
+
+        if (cita.FechaHoraInicio < _hora.Ahora)
+        {
+            return Problem(statusCode: 409, title: "La hora de esta solicitud ya pasó.");
+        }
+
+        var linkReunion = request.LinkReunion?.Trim();
+        if (!string.IsNullOrEmpty(linkReunion) && !EsEnlaceWeb(linkReunion))
+        {
+            return Problem(statusCode: 400, title: "El enlace de reunión debe ser una dirección web (https://…).");
+        }
+
         cita.Estado = "Aceptada";
-        cita.LinkReunion = request.LinkReunion;
+        cita.LinkReunion = string.IsNullOrEmpty(linkReunion) ? null : linkReunion;
         cita.Notas = request.Notas;
 
         await _context.SaveChangesAsync(cancellationToken);
 
         await NotificarAsync(
             cita.Id,
-            datos => _notificaciones.CitaAceptada(datos, request.LinkReunion, request.Notas),
+            datos => _notificaciones.CitaAceptada(datos, cita.LinkReunion, request.Notas),
             cancellationToken);
 
         return Ok(new { Mensaje = "Cita aceptada" });
     }
 
     [HttpPut("{id}/rechazar")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<IActionResult> RechazarCita(
         int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RechazarCitaRequestDto? request = null,
@@ -211,6 +253,12 @@ public class CitasController : ControllerBase
             return Forbid();
         }
 
+        // Una cita ya aceptada se cancela (avisa con motivo), no se rechaza.
+        if (cita.Estado != "Pendiente")
+        {
+            return Problem(statusCode: 409, title: "Solo se pueden rechazar solicitudes pendientes.");
+        }
+
         var motivo = request?.Motivo?.Trim();
         if (!string.IsNullOrEmpty(motivo))
         {
@@ -229,7 +277,7 @@ public class CitasController : ControllerBase
     }
 
     [HttpGet("pendientes")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<ActionResult<IReadOnlyList<CitaPendienteResponseDto>>> ObtenerPendientes(
         CancellationToken cancellationToken = default)
     {
@@ -464,7 +512,7 @@ public class CitasController : ControllerBase
     }
 
     [HttpPut("{id}/completar")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<IActionResult> CompletarCita(int id, CancellationToken cancellationToken = default)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -495,4 +543,9 @@ public class CitasController : ControllerBase
         await _context.SaveChangesAsync(cancellationToken);
         return Ok(new { Mensaje = "Cita completada" });
     }
+
+    private static bool EsEnlaceWeb(string enlace) =>
+        enlace.Length <= 255 &&
+        Uri.TryCreate(enlace, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 }

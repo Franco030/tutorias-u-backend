@@ -6,23 +6,33 @@ namespace backend.Services
 {
     public class EmailService : IEmailService
     {
-        private readonly IConfiguration _configuration;
-        private readonly EmailClient _emailClient;
-        private readonly string _senderAddress;
+        private readonly EmailClient? _emailClient;
+        private readonly string? _senderAddress;
 
-        public EmailService(IConfiguration configuration)
+        // Sin configuración de correo el servicio se construye igual (si no,
+        // todo lo que dependa de él, como el inicio de sesión, dejaría de
+        // funcionar); solo falla al intentar enviar.
+        public EmailService(IConfiguration configuration, ILogger<EmailService> logger)
         {
-            _configuration = configuration;
+            var connectionString = configuration["COMMUNICATION_SERVICES_CS"];
+            _senderAddress = configuration["EmailSenderAddress"];
 
-            string connectionString = _configuration["COMMUNICATION_SERVICES_CS"] ?? throw new InvalidOperationException("Falta Clave de comunicacion en appsettings");
-
-            _senderAddress = _configuration["EmailSenderAddress"] ?? throw new InvalidOperationException("Falta EmailSender");
+            if (string.IsNullOrWhiteSpace(connectionString) || string.IsNullOrWhiteSpace(_senderAddress))
+            {
+                logger.LogWarning("El correo no está configurado (COMMUNICATION_SERVICES_CS / EmailSenderAddress): no se enviarán correos.");
+                return;
+            }
 
             _emailClient = new EmailClient(connectionString);
         }
 
         public async Task SendEmailAsync(string toEmail, string subject, string htmlContent)
         {
+            if (_emailClient == null || _senderAddress == null)
+            {
+                throw new InvalidOperationException("El servicio de correo no está configurado.");
+            }
+
             try
             {
                 var emailMessage = new EmailMessage(

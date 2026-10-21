@@ -1,4 +1,6 @@
 using backend.Controllers;
+using backend.Services.Interfaces;
+using Moq;
 using backend.Data;
 using backend.DTOs.Responses;
 using backend.DTOs.Requests;
@@ -64,7 +66,7 @@ namespace backend.Tests
                 MateriaIds = new List<int> { materia.Id }
             };
 
-            var result = await _controller.Aplicar(request);
+            var result = await _controller.Aplicar(request, Mock.Of<IBlobService>(b => b.EsComprobantePropio(It.IsAny<string?>())));
 
             Assert.IsType<OkObjectResult>(result);
 

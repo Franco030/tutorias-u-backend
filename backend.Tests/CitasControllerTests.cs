@@ -1,3 +1,4 @@
+using backend.Authorization;
 using Microsoft.Extensions.Logging.Abstractions;
 using backend.Services.Interfaces;
 using Moq;
@@ -99,7 +100,7 @@ public class CitasControllerTests
 
         var result = await controller.ObtenerPendientes();
 
-        Assert.Equal("Tutor", authorizeAttribute.Roles);
+        Assert.Equal(PoliticasAutorizacion.TutorAprobado, authorizeAttribute.Policy);
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
         var citas = Assert.IsAssignableFrom<IReadOnlyList<CitaPendienteResponseDto>>(okResult.Value);
         var cita = Assert.Single(citas);
@@ -146,6 +147,7 @@ public class CitasControllerTests
             FechaHoraInicio = NextWeekday(DateTime.UtcNow, DayOfWeek.Monday).AddHours(10),
             FechaHoraFin = NextWeekday(DateTime.UtcNow, DayOfWeek.Monday).AddHours(11)
         };
+        Semillas.TutorAprobado(context, 2, 3);
         context.TutorDisponibilidads.Add(new TutorDisponibilidad
         {
             TutorId = request.TutorId,
@@ -660,7 +662,7 @@ public class CitasControllerTests
             .Cast<AuthorizeAttribute>()
             .Single();
 
-        Assert.Equal("Tutor", authorizeAttribute.Roles);
+        Assert.Equal(PoliticasAutorizacion.TutorAprobado, authorizeAttribute.Policy);
     }
 
     [Fact]
@@ -672,7 +674,7 @@ public class CitasControllerTests
             .Cast<AuthorizeAttribute>()
             .Single();
 
-        Assert.Equal("Tutor", authorizeAttribute.Roles);
+        Assert.Equal(PoliticasAutorizacion.TutorAprobado, authorizeAttribute.Policy);
     }
 
     private static CitasController CreateController(AppDbContext context, string userId, string? role = null)

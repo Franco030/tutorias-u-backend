@@ -71,6 +71,7 @@ public class HoraPlataformaTests
         // Son las 10:00 locales (16:00 UTC): el bloque de las 16:00 sigue disponible.
         var context = GetDbContext();
         var ahora = new DateTime(2026, 10, 22, 10, 0, 0);
+        Semillas.TutorAprobado(context, 2, 3);
         context.TutorDisponibilidads.Add(new TutorDisponibilidad
         {
             TutorId = 2,

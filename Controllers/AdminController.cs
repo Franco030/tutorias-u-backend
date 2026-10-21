@@ -22,8 +22,11 @@ public sealed class AdminController : ControllerBase
         _notificaciones = notificaciones;
     }
 
+    private static readonly TimeSpan VigenciaComprobante = TimeSpan.FromMinutes(30);
+
     [HttpGet("solicitudes")]
     public async Task<ActionResult<IReadOnlyList<TutorSolicitudDto>>> ObtenerSolicitudes(
+        [FromServices] IBlobService blobService,
         CancellationToken cancellationToken)
     {
         var solicitudes = await _context.Usuarios
@@ -54,7 +57,9 @@ public sealed class AdminController : ControllerBase
                 Id = s.Id,
                 Nombre = s.Nombre,
                 Correo = s.Email,
-                UrlCredencial = s.Ultima?.UrlCredencial,
+                // Los comprobantes son privados: se entrega una URL firmada
+                // que vence (la lista se vuelve a pedir con "Actualizar").
+                UrlCredencial = blobService.GenerarUrlLectura(s.Ultima?.UrlCredencial, VigenciaComprobante),
                 FechaSolicitud = s.Ultima?.FechaSolicitud,
                 Materias = s.Ultima?.Materias ?? new List<string>()
             })

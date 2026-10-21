@@ -3,6 +3,8 @@ using System.Security.Claims;
 using backend.DTOs.Requests;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using backend.Middleware;
 
 namespace backend.Controllers;
 
@@ -68,6 +70,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
         try
@@ -82,6 +85,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         try
@@ -147,6 +151,10 @@ public class AuthController : ControllerBase
             var result = await _authService.AsignarRolAsync(userId, dto.NuevoRol);
 
             return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(statusCode: 409, title: ex.Message);
         }
         catch (Exception ex)
         {

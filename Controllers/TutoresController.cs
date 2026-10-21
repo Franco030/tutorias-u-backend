@@ -1,8 +1,10 @@
+using backend.Authorization;
 using backend.Data;
 using backend.DTOs.Requests;
 using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Models;
+using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -23,8 +25,17 @@ namespace backend.Controllers
 
         [HttpPost("aplicar")]
         [Authorize]
-        public async Task<IActionResult> Aplicar([FromBody] AplicarTutorRequestDto request)
+        public async Task<IActionResult> Aplicar(
+            [FromBody] AplicarTutorRequestDto request,
+            [FromServices] IBlobService blobService)
         {
+            // Solo un comprobante subido a nuestro almacenamiento: así el
+            // administrador nunca abre un enlace arbitrario del aspirante.
+            if (!blobService.EsComprobantePropio(request.UrlCredencial))
+            {
+                return Problem(statusCode: 400, title: "Sube tu comprobante desde la aplicación.");
+            }
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
 
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int usuarioId))
@@ -171,7 +182,7 @@ namespace backend.Controllers
         }
 
         [HttpPut("mis-materias")]
-        [Authorize(Roles = "Tutor")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
         public async Task<IActionResult> ActualizarMisMaterias([FromBody] ActualizarMateriasTutorDto request)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
@@ -213,7 +224,7 @@ namespace backend.Controllers
         }
 
         [HttpPost("disponibilidad")]
-        [Authorize(Roles = "Tutor")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
         public async Task<IActionResult> GuardarDisponibilidad([FromBody] List<DisponibilidadRequestDto> request)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");

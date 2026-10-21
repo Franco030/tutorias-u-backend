@@ -48,7 +48,7 @@ public class AdminControllerTests
             });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(BlobQueFirma(), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var solicitudes = Assert.IsAssignableFrom<IReadOnlyList<backend.DTOs.Responses.TutorSolicitudDto>>(ok.Value);
@@ -115,7 +115,7 @@ public class AdminControllerTests
             });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(BlobQueFirma(), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var solicitud = Assert.Single(
@@ -184,5 +184,14 @@ public class AdminControllerTests
             .Options;
 
         return new AppDbContext(options);
+    }
+
+    // Firma "de mentira": devuelve la misma URL para comparar en las pruebas.
+    private static IBlobService BlobQueFirma()
+    {
+        var blob = new Mock<IBlobService>();
+        blob.Setup(b => b.GenerarUrlLectura(It.IsAny<string?>(), It.IsAny<TimeSpan>()))
+            .Returns((string? url, TimeSpan _) => url);
+        return blob.Object;
     }
 }

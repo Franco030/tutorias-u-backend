@@ -33,6 +33,7 @@ public class DobleReservaTests
             .Options;
         var context = new ContextoConIndiceUnico(options);
         var ahora = new DateTime(2026, 10, 22, 10, 0, 0);
+        Semillas.TutorAprobado(context, 2, 3);
         context.TutorDisponibilidads.Add(new TutorDisponibilidad
         {
             TutorId = 2,
