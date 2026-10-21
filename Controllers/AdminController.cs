@@ -1,6 +1,7 @@
 using backend.Data;
 using backend.DTOs.Responses;
 using backend.Enums;
+using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,12 @@ namespace backend.Controllers;
 public sealed class AdminController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INotificacionesCorreo _notificaciones;
 
-    public AdminController(AppDbContext context)
+    public AdminController(AppDbContext context, INotificacionesCorreo notificaciones)
     {
         _context = context;
+        _notificaciones = notificaciones;
     }
 
     [HttpGet("solicitudes")]
@@ -103,6 +106,8 @@ public sealed class AdminController : ControllerBase
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        _notificaciones.TutorAprobado(tutor.Nombre, tutor.Email);
+
         return NoContent();
     }
 
@@ -126,6 +131,8 @@ public sealed class AdminController : ControllerBase
         // Solo cambia el estado: el rol y los datos del usuario se conservan.
         aspirante.EstadoAprobacionId = (int)EstadoAprobacion.Rechazado;
         await _context.SaveChangesAsync(cancellationToken);
+
+        _notificaciones.TutorRechazado(aspirante.Nombre, aspirante.Email);
 
         return NoContent();
     }

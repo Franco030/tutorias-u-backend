@@ -1,3 +1,5 @@
+using backend.Services.Interfaces;
+using Moq;
 using backend.Controllers;
 using backend.Data;
 using backend.Enums;
@@ -46,7 +48,7 @@ public class AdminControllerTests
             });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context).ObtenerSolicitudes(CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var solicitudes = Assert.IsAssignableFrom<IReadOnlyList<backend.DTOs.Responses.TutorSolicitudDto>>(ok.Value);
@@ -71,7 +73,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context).AprobarTutor(10, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).AprobarTutor(10, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         
@@ -113,7 +115,7 @@ public class AdminControllerTests
             });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context).ObtenerSolicitudes(CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).ObtenerSolicitudes(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);
         var solicitud = Assert.Single(
@@ -138,7 +140,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context).RechazarTutor(30, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(30, CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         var userInDb = await context.Usuarios.FindAsync(30);
@@ -161,7 +163,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context).RechazarTutor(31, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, CancellationToken.None);
 
         Assert.IsType<NotFoundObjectResult>(result);
     }

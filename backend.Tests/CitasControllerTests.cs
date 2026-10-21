@@ -1,3 +1,6 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using backend.Services.Interfaces;
+using Moq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -124,7 +127,7 @@ public class CitasControllerTests
         // Arrange
         var dbName = Guid.NewGuid().ToString();
         var context = GetDbContext(dbName);
-        var controller = new CitasController(context);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
 
         var user = new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
         {
@@ -174,7 +177,7 @@ public class CitasControllerTests
         // Arrange
         var dbName = Guid.NewGuid().ToString();
         var context = GetDbContext(dbName);
-        var controller = new CitasController(context);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
 
         var user = new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
         {
@@ -681,7 +684,7 @@ public class CitasControllerTests
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
-        var controller = new CitasController(context);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
         var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "mock"));
         controller.ControllerContext = new ControllerContext
         {

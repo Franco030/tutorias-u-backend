@@ -8,6 +8,8 @@ using backend.Data;
 using backend.Models;
 using backend.DTOs.Citas;
 using backend.DTOs.Responses;
+using backend.Services.Interfaces;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
@@ -17,10 +19,49 @@ namespace backend.Controllers;
 public class CitasController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INotificacionesCorreo _notificaciones;
+    private readonly ILogger<CitasController> _logger;
 
-    public CitasController(AppDbContext context)
+    public CitasController(
+        AppDbContext context,
+        INotificacionesCorreo notificaciones,
+        ILogger<CitasController> logger)
     {
         _context = context;
+        _notificaciones = notificaciones;
+        _logger = logger;
+    }
+
+    // Avisa por correo después de guardar. Nunca lanza: si falla la consulta de
+    // los datos, el cambio ya está en la base de datos y solo se registra.
+    private async Task NotificarAsync(
+        int citaId,
+        Action<DatosCitaCorreo> enviar,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var datos = await _context.Citas
+                .AsNoTracking()
+                .Where(cita => cita.Id == citaId)
+                .Select(cita => new DatosCitaCorreo(
+                    cita.Materia.Nombre,
+                    cita.FechaHoraInicio,
+                    cita.Estudiante.Nombre,
+                    cita.Estudiante.Email,
+                    cita.Tutor.Nombre,
+                    cita.Tutor.Email))
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (datos != null)
+            {
+                enviar(datos);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo notificar por correo el cambio de la cita {CitaId}.", citaId);
+        }
     }
 
     [HttpPost("agendar")]
@@ -86,6 +127,8 @@ public class CitasController : ControllerBase
         _context.Citas.Add(cita);
         await _context.SaveChangesAsync(cancellationToken);
 
+        await NotificarAsync(cita.Id, _notificaciones.CitaSolicitada, cancellationToken);
+
         return Created("", new { Mensaje = "Cita agendada exitosamente", CitaId = cita.Id });
     }
 
@@ -119,12 +162,20 @@ public class CitasController : ControllerBase
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        await NotificarAsync(
+            cita.Id,
+            datos => _notificaciones.CitaAceptada(datos, request.LinkReunion, request.Notas),
+            cancellationToken);
+
         return Ok(new { Mensaje = "Cita aceptada" });
     }
 
     [HttpPut("{id}/rechazar")]
     [Authorize(Roles = "Tutor")]
-    public async Task<IActionResult> RechazarCita(int id, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> RechazarCita(
+        int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RechazarCitaRequestDto? request = null,
+        CancellationToken cancellationToken = default)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
@@ -143,9 +194,19 @@ public class CitasController : ControllerBase
             return Forbid();
         }
 
+        var motivo = request?.Motivo?.Trim();
+        if (!string.IsNullOrEmpty(motivo))
+        {
+            cita.Notas = string.IsNullOrWhiteSpace(cita.Notas)
+                ? $"Motivo de rechazo: {motivo}"
+                : $"{cita.Notas}{Environment.NewLine}Motivo de rechazo: {motivo}";
+        }
+
         cita.Estado = "Rechazada";
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        await NotificarAsync(cita.Id, datos => _notificaciones.CitaRechazada(datos, motivo), cancellationToken);
 
         return Ok(new { Mensaje = "Cita rechazada" });
     }
@@ -314,6 +375,12 @@ public class CitasController : ControllerBase
 
         cita.Estado = "Cancelada";
         await _context.SaveChangesAsync(cancellationToken);
+
+        var canceladaPorTutor = cita.TutorId == userId;
+        await NotificarAsync(
+            cita.Id,
+            datos => _notificaciones.CitaCancelada(datos, canceladaPorTutor, request.Motivo),
+            cancellationToken);
 
         return Ok(new { Mensaje = "Cita cancelada" });
     }

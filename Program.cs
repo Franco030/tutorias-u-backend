@@ -14,6 +14,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+// Correos de citas y postulaciones: se encolan y se envían en segundo plano.
+builder.Services.AddSingleton<ColaCorreos>();
+builder.Services.AddSingleton<IColaCorreos>(sp => sp.GetRequiredService<ColaCorreos>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ColaCorreos>());
+builder.Services.AddScoped<INotificacionesCorreo, NotificacionesCorreo>();
 builder.Services.AddScoped<IBlobService, BlobService>();
 builder.Services.AddAuthorization();
 

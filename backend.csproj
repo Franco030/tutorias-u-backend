@@ -35,6 +35,10 @@
     <None Remove="backend.Tests\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Services\Templates\*.html" />
+  </ItemGroup>
+
   <PropertyGroup>
     <WarningsAsErrors>CS0219,CS0168</WarningsAsErrors>
   </PropertyGroup>
