@@ -24,6 +24,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Materia> Materias { get; set; }
 
+    public virtual DbSet<Resena> Resenas { get; set; }
+
     public virtual DbSet<SolicitudMateria> SolicitudMaterias { get; set; }
 
     public virtual DbSet<TutorDisponibilidad> TutorDisponibilidads { get; set; }
@@ -31,14 +33,6 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; }
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
-
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
-        }
-    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +46,14 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<Cita>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("PK__Citas__3214EC07B5DF2F7A");
+
+            entity.HasIndex(e => new { e.EstudianteId, e.FechaHoraInicio }, "IX_Citas_EstudianteId");
+
+            entity.HasIndex(e => new { e.TutorId, e.FechaHoraInicio }, "IX_Citas_TutorId");
+
+            entity.HasIndex(e => new { e.TutorId, e.FechaHoraInicio }, "UX_Citas_Tutor_Horario")
+                .IsUnique()
+                .HasFilter("([Estado] IN ('Pendiente', 'Aceptada'))");
 
             entity.Property(e => e.Estado)
                 .HasMaxLength(50)
@@ -94,6 +96,33 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.CategoriaId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_Materias_Categorias");
+        });
+
+        modelBuilder.Entity<Resena>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Resenas__3214EC0729CBB6FD");
+
+            entity.HasIndex(e => new { e.TutorId, e.FechaCreacion }, "IX_Resenas_TutorId").IsDescending(false, true);
+
+            entity.HasIndex(e => e.CitaId, "UQ__Resenas__F0E2D9D36C56BE15").IsUnique();
+
+            entity.Property(e => e.Comentario).HasMaxLength(1000);
+            entity.Property(e => e.FechaCreacion).HasDefaultValueSql("(getdate())");
+
+            entity.HasOne(d => d.Cita).WithOne(p => p.Resena)
+                .HasForeignKey<Resena>(d => d.CitaId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Resenas_Citas");
+
+            entity.HasOne(d => d.Estudiante).WithMany(p => p.ResenaEstudiantes)
+                .HasForeignKey(d => d.EstudianteId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Resenas_Estudiante");
+
+            entity.HasOne(d => d.Tutor).WithMany(p => p.ResenaTutors)
+                .HasForeignKey(d => d.TutorId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_Resenas_Tutor");
         });
 
         modelBuilder.Entity<SolicitudMateria>(entity =>

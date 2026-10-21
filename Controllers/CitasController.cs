@@ -4,10 +4,14 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using backend.Authorization;
 using backend.Data;
+using backend.Enums;
 using backend.Models;
 using backend.DTOs.Citas;
 using backend.DTOs.Responses;
+using backend.Services.Interfaces;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
@@ -17,10 +21,52 @@ namespace backend.Controllers;
 public class CitasController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INotificacionesCorreo _notificaciones;
+    private readonly ILogger<CitasController> _logger;
+    private readonly IHoraPlataforma _hora;
 
-    public CitasController(AppDbContext context)
+    public CitasController(
+        AppDbContext context,
+        INotificacionesCorreo notificaciones,
+        ILogger<CitasController> logger,
+        IHoraPlataforma hora)
     {
         _context = context;
+        _notificaciones = notificaciones;
+        _logger = logger;
+        _hora = hora;
+    }
+
+    // Avisa por correo después de guardar. Nunca lanza: si falla la consulta de
+    // los datos, el cambio ya está en la base de datos y solo se registra.
+    private async Task NotificarAsync(
+        int citaId,
+        Action<DatosCitaCorreo> enviar,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var datos = await _context.Citas
+                .AsNoTracking()
+                .Where(cita => cita.Id == citaId)
+                .Select(cita => new DatosCitaCorreo(
+                    cita.Materia.Nombre,
+                    cita.FechaHoraInicio,
+                    cita.Estudiante.Nombre,
+                    cita.Estudiante.Email,
+                    cita.Tutor.Nombre,
+                    cita.Tutor.Email))
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (datos != null)
+            {
+                enviar(datos);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "No se pudo notificar por correo el cambio de la cita {CitaId}.", citaId);
+        }
     }
 
     [HttpPost("agendar")]
@@ -29,25 +75,30 @@ public class CitasController : ControllerBase
         [FromBody] CrearCitaRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        if (request.FechaHoraInicio < DateTime.UtcNow)
+        // Las horas llegan en la hora local de la plataforma; si un cliente
+        // antiguo las manda con "Z", se toman igual como hora local.
+        var fechaHoraInicio = DateTime.SpecifyKind(request.FechaHoraInicio, DateTimeKind.Unspecified);
+        var fechaHoraFin = DateTime.SpecifyKind(request.FechaHoraFin, DateTimeKind.Unspecified);
+
+        if (fechaHoraInicio < _hora.Ahora)
         {
-            return BadRequest("No puedes agendar en el pasado");
+            return Problem(statusCode: 400, title: "No puedes agendar en el pasado");
         }
 
-        if (request.FechaHoraFin <= request.FechaHoraInicio ||
-            request.FechaHoraFin.Date != request.FechaHoraInicio.Date)
+        if (fechaHoraFin <= fechaHoraInicio ||
+            fechaHoraFin.Date != fechaHoraInicio.Date)
         {
-            return BadRequest("El bloque de la cita no es válido");
+            return Problem(statusCode: 400, title: "El bloque de la cita no es válido");
         }
 
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int estudianteId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var compromisoExistente = await _context.Citas.AnyAsync(cita =>
-            cita.FechaHoraInicio == request.FechaHoraInicio &&
+            cita.FechaHoraInicio == fechaHoraInicio &&
             cita.Estado != "Cancelada" &&
             cita.Estado != "Rechazada" &&
             (cita.TutorId == request.TutorId || cita.EstudianteId == estudianteId),
@@ -55,12 +106,34 @@ public class CitasController : ControllerBase
 
         if (compromisoExistente)
         {
-            return BadRequest("El tutor ya tiene un compromiso en este horario");
+            return Problem(statusCode: 400, title: "El tutor ya tiene un compromiso en este horario");
         }
 
-        var diaSemana = (byte)request.FechaHoraInicio.DayOfWeek;
-        var horaInicio = TimeOnly.FromDateTime(request.FechaHoraInicio);
-        var horaFin = TimeOnly.FromDateTime(request.FechaHoraFin);
+        // Solo con un tutor aprobado y en una materia que imparte.
+        var tutor = await _context.Usuarios
+            .AsNoTracking()
+            .Where(usuario => usuario.Id == request.TutorId)
+            .Select(usuario => new
+            {
+                usuario.Rol,
+                usuario.EstadoAprobacionId,
+                ImparteMateria = usuario.MateriaNavigation.Any(materia => materia.Id == request.MateriaId)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tutor == null || tutor.Rol != "Tutor" || tutor.EstadoAprobacionId != (int)EstadoAprobacion.Aprobado)
+        {
+            return Problem(statusCode: 400, title: "El tutor no está disponible para agendar.");
+        }
+
+        if (!tutor.ImparteMateria)
+        {
+            return Problem(statusCode: 400, title: "El tutor no imparte esa materia.");
+        }
+
+        var diaSemana = (byte)fechaHoraInicio.DayOfWeek;
+        var horaInicio = TimeOnly.FromDateTime(fechaHoraInicio);
+        var horaFin = TimeOnly.FromDateTime(fechaHoraFin);
         var disponibilidadConfigurada = await _context.TutorDisponibilidads
             .AnyAsync(disponibilidad =>
                 disponibilidad.TutorId == request.TutorId &&
@@ -71,7 +144,7 @@ public class CitasController : ControllerBase
 
         if (!disponibilidadConfigurada)
         {
-            return BadRequest("El bloque solicitado no coincide con la disponibilidad del tutor");
+            return Problem(statusCode: 400, title: "El bloque solicitado no coincide con la disponibilidad del tutor");
         }
 
         var cita = new Cita
@@ -79,18 +152,29 @@ public class CitasController : ControllerBase
             EstudianteId = estudianteId,
             TutorId = request.TutorId,
             MateriaId = request.MateriaId,
-            FechaHoraInicio = request.FechaHoraInicio,
+            FechaHoraInicio = fechaHoraInicio,
             Estado = "Pendiente"
         };
 
         _context.Citas.Add(cita);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Dos reservas simultáneas del mismo bloque: el índice único
+            // UX_Citas_Tutor_Horario rechaza la segunda.
+            return Problem(statusCode: 409, title: "El tutor ya tiene un compromiso en este horario");
+        }
+
+        await NotificarAsync(cita.Id, _notificaciones.CitaSolicitada, cancellationToken);
 
         return Created("", new { Mensaje = "Cita agendada exitosamente", CitaId = cita.Id });
     }
 
     [HttpPut("{id}/aceptar")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<IActionResult> AceptarCita(
         int id,
         [FromBody] AceptarCitaRequestDto request,
@@ -99,13 +183,13 @@ public class CitasController : ControllerBase
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
@@ -113,45 +197,87 @@ public class CitasController : ControllerBase
             return Forbid();
         }
 
+        // Solo se acepta una solicitud pendiente y que todavía no ocurre: una
+        // cancelada o rechazada no se puede reactivar (su horario pudo ocuparse).
+        if (cita.Estado != "Pendiente")
+        {
+            return Problem(statusCode: 409, title: "Solo se pueden aceptar solicitudes pendientes.");
+        }
+
+        if (cita.FechaHoraInicio < _hora.Ahora)
+        {
+            return Problem(statusCode: 409, title: "La hora de esta solicitud ya pasó.");
+        }
+
+        var linkReunion = request.LinkReunion?.Trim();
+        if (!string.IsNullOrEmpty(linkReunion) && !EsEnlaceWeb(linkReunion))
+        {
+            return Problem(statusCode: 400, title: "El enlace de reunión debe ser una dirección web (https://…).");
+        }
+
         cita.Estado = "Aceptada";
-        cita.LinkReunion = request.LinkReunion;
+        cita.LinkReunion = string.IsNullOrEmpty(linkReunion) ? null : linkReunion;
         cita.Notas = request.Notas;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        await NotificarAsync(
+            cita.Id,
+            datos => _notificaciones.CitaAceptada(datos, cita.LinkReunion, request.Notas),
+            cancellationToken);
 
         return Ok(new { Mensaje = "Cita aceptada" });
     }
 
     [HttpPut("{id}/rechazar")]
-    [Authorize(Roles = "Tutor")]
-    public async Task<IActionResult> RechazarCita(int id, CancellationToken cancellationToken = default)
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+    public async Task<IActionResult> RechazarCita(
+        int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RechazarCitaRequestDto? request = null,
+        CancellationToken cancellationToken = default)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
         {
             return Forbid();
+        }
+
+        // Una cita ya aceptada se cancela (avisa con motivo), no se rechaza.
+        if (cita.Estado != "Pendiente")
+        {
+            return Problem(statusCode: 409, title: "Solo se pueden rechazar solicitudes pendientes.");
+        }
+
+        var motivo = request?.Motivo?.Trim();
+        if (!string.IsNullOrEmpty(motivo))
+        {
+            cita.Notas = string.IsNullOrWhiteSpace(cita.Notas)
+                ? $"Motivo de rechazo: {motivo}"
+                : $"{cita.Notas}{Environment.NewLine}Motivo de rechazo: {motivo}";
         }
 
         cita.Estado = "Rechazada";
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        await NotificarAsync(cita.Id, datos => _notificaciones.CitaRechazada(datos, motivo), cancellationToken);
+
         return Ok(new { Mensaje = "Cita rechazada" });
     }
 
     [HttpGet("pendientes")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<ActionResult<IReadOnlyList<CitaPendienteResponseDto>>> ObtenerPendientes(
         CancellationToken cancellationToken = default)
     {
@@ -160,7 +286,7 @@ public class CitasController : ControllerBase
         if (string.IsNullOrEmpty(userIdClaim) ||
             !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var citas = await _context.Citas
@@ -196,10 +322,10 @@ public class CitasController : ControllerBase
 
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
         {
-            return Unauthorized(new { mensaje = "Usuario no autorizado o token inválido." });
+            return Problem(statusCode: 401, title: "Usuario no autorizado o token inválido.");
         }
 
-        var ahoraUtc = DateTime.UtcNow;
+        var ahora = _hora.Ahora;
 
         IQueryable<ProximaCitaResponseDto> query;
 
@@ -209,7 +335,7 @@ public class CitasController : ControllerBase
                 .AsNoTracking()
                 .Where(c => c.EstudianteId == userId &&
                             (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahoraUtc)
+                            c.FechaHoraInicio >= ahora)
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -228,7 +354,7 @@ public class CitasController : ControllerBase
                 .AsNoTracking()
                 .Where(c => c.TutorId == userId &&
                             (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahoraUtc)
+                            c.FechaHoraInicio >= ahora)
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -286,13 +412,13 @@ public class CitasController : ControllerBase
                        ?? User.FindFirst("id")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != userId && cita.EstudianteId != userId)
@@ -302,7 +428,7 @@ public class CitasController : ControllerBase
 
         if (cita.Estado != "Pendiente" && cita.Estado != "Aceptada")
         {
-            return BadRequest("Solo se pueden cancelar citas pendientes o aceptadas");
+            return Problem(statusCode: 400, title: "Solo se pueden cancelar citas pendientes o aceptadas");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Motivo))
@@ -314,6 +440,12 @@ public class CitasController : ControllerBase
 
         cita.Estado = "Cancelada";
         await _context.SaveChangesAsync(cancellationToken);
+
+        var canceladaPorTutor = cita.TutorId == userId;
+        await NotificarAsync(
+            cita.Id,
+            datos => _notificaciones.CitaCancelada(datos, canceladaPorTutor, request.Motivo),
+            cancellationToken);
 
         return Ok(new { Mensaje = "Cita cancelada" });
     }
@@ -330,17 +462,17 @@ public class CitasController : ControllerBase
 
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
-        var ahoraUtc = DateTime.UtcNow;
+        var ahora = _hora.Ahora;
         var citasQuery = _context.Citas
             .Where(cita =>
                 (userRole == "Estudiante" && cita.EstudianteId == userId) ||
                 (userRole == "Tutor" && cita.TutorId == userId));
 
         var citasCompletadas = await citasQuery
-            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio < ahoraUtc)
+            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio < ahora)
             .ToListAsync(cancellationToken);
 
         foreach (var cita in citasCompletadas)
@@ -356,7 +488,7 @@ public class CitasController : ControllerBase
         var historial = await citasQuery
             .AsNoTracking()
             .Where(cita =>
-                cita.FechaHoraInicio < ahoraUtc ||
+                cita.FechaHoraInicio < ahora ||
                 cita.Estado == "Completada" ||
                 cita.Estado == "Cancelada" ||
                 cita.Estado == "Rechazada")
@@ -369,7 +501,8 @@ public class CitasController : ControllerBase
                 FechaHoraInicio = cita.FechaHoraInicio,
                 LinkReunion = cita.LinkReunion,
                 Notas = cita.Notas,
-                Estado = cita.Estado
+                Estado = cita.Estado,
+                Puntuacion = cita.Resena == null ? null : cita.Resena.Puntuacion
             })
             .ToListAsync(cancellationToken);
 
@@ -379,7 +512,7 @@ public class CitasController : ControllerBase
     }
 
     [HttpPut("{id}/completar")]
-    [Authorize(Roles = "Tutor")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
     public async Task<IActionResult> CompletarCita(int id, CancellationToken cancellationToken = default)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
@@ -387,13 +520,13 @@ public class CitasController : ControllerBase
                        ?? User.FindFirst("id")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
@@ -403,11 +536,16 @@ public class CitasController : ControllerBase
 
         if (cita.Estado != "Aceptada")
         {
-            return BadRequest("Solo se pueden completar citas aceptadas");
+            return Problem(statusCode: 400, title: "Solo se pueden completar citas aceptadas");
         }
 
         cita.Estado = "Completada";
         await _context.SaveChangesAsync(cancellationToken);
         return Ok(new { Mensaje = "Cita completada" });
     }
+
+    private static bool EsEnlaceWeb(string enlace) =>
+        enlace.Length <= 255 &&
+        Uri.TryCreate(enlace, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
 }

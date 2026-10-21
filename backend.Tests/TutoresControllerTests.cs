@@ -1,4 +1,6 @@
 using backend.Controllers;
+using backend.Services.Interfaces;
+using Moq;
 using backend.Data;
 using backend.DTOs.Responses;
 using backend.DTOs.Requests;
@@ -64,7 +66,7 @@ namespace backend.Tests
                 MateriaIds = new List<int> { materia.Id }
             };
 
-            var result = await _controller.Aplicar(request);
+            var result = await _controller.Aplicar(request, Mock.Of<IBlobService>(b => b.EsComprobantePropio(It.IsAny<string?>())));
 
             Assert.IsType<OkObjectResult>(result);
 
@@ -129,10 +131,10 @@ namespace backend.Tests
             await _dbContext.SaveChangesAsync();
 
             var result = await _controller.GetTutorProfile(tutorPendiente.Id);
-            Assert.IsType<NotFoundObjectResult>(result);
+            ProblemaAssert.EsProblema(result, 404);
 
             var resultInexistente = await _controller.GetTutorProfile(999);
-            Assert.IsType<NotFoundObjectResult>(resultInexistente);
+            ProblemaAssert.EsProblema(resultInexistente, 404);
         }
 
         [Fact]
@@ -209,7 +211,7 @@ namespace backend.Tests
                 }
             });
 
-            Assert.IsType<BadRequestObjectResult>(result);
+            ProblemaAssert.EsProblema(result, 400);
             var savedBlock = Assert.Single(await _dbContext.TutorDisponibilidads.ToListAsync());
             Assert.Equal(existingBlock.Id, savedBlock.Id);
             Assert.Equal((byte)DayOfWeek.Friday, savedBlock.DiaSemana);

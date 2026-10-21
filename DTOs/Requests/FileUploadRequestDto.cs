@@ -6,7 +6,5 @@ namespace backend.DTOs.Requests
     {
         [Required(ErrorMessage = "El archivo es obligatorio.")]
         public required IFormFile File { get; set; }
-
-        public string Container { get; set; } = "uploads";
     }
 }

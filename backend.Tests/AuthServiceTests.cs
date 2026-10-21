@@ -1,6 +1,8 @@
 ﻿using backend.Services;
 using backend.DTOs.Requests;
 using backend.Data;
+using backend.Enums;
+using backend.Models;
 using backend.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,6 +67,36 @@ namespace backend.Tests
 
             // Verificar que nuestro sistema intentó mandar el correo de verificación exactamente 1 vez
             _mockEmailService.Verify(e => e.SendEmailAsync(dto.Email, It.IsAny<string>(), It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task RefrescarSesionAsync_DevuelveElRolYEstadoActuales()
+        {
+            // Un aspirante que el administrador aprobó después de iniciar sesión.
+            _dbContext.Usuarios.Add(new Usuario
+            {
+                Id = 50,
+                Email = "aspirante@ejemplo.com",
+                Nombre = "Aspirante",
+                Rol = "Tutor",
+                AuthProvider = "Local",
+                EstadoAprobacionId = (int)EstadoAprobacion.Aprobado,
+                OnboardingCompleto = true
+            });
+            await _dbContext.SaveChangesAsync();
+
+            var sesion = await _authService.RefrescarSesionAsync(50);
+
+            Assert.Equal("Tutor", sesion.Rol);
+            Assert.Equal("Aprobado", sesion.EstadoAprobacion);
+            var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(sesion.Token);
+            Assert.Contains(jwt.Claims, c => c.Value == "Tutor");
+        }
+
+        [Fact]
+        public async Task RefrescarSesionAsync_FallaSiElUsuarioNoExiste()
+        {
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _authService.RefrescarSesionAsync(999));
         }
     }
 }

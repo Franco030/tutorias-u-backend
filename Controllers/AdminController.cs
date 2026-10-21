@@ -1,6 +1,7 @@
 using backend.Data;
 using backend.DTOs.Responses;
 using backend.Enums;
+using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,14 +14,19 @@ namespace backend.Controllers;
 public sealed class AdminController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INotificacionesCorreo _notificaciones;
 
-    public AdminController(AppDbContext context)
+    public AdminController(AppDbContext context, INotificacionesCorreo notificaciones)
     {
         _context = context;
+        _notificaciones = notificaciones;
     }
+
+    private static readonly TimeSpan VigenciaComprobante = TimeSpan.FromMinutes(30);
 
     [HttpGet("solicitudes")]
     public async Task<ActionResult<IReadOnlyList<TutorSolicitudDto>>> ObtenerSolicitudes(
+        [FromServices] IBlobService blobService,
         CancellationToken cancellationToken)
     {
         var solicitudes = await _context.Usuarios
@@ -28,15 +34,38 @@ public sealed class AdminController : ControllerBase
             .Where(usuario =>
                 usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente)
             .OrderBy(usuario => usuario.Id)
-            .Select(usuario => new TutorSolicitudDto
+            .Select(usuario => new
             {
-                Id = usuario.Id,
-                Nombre = usuario.Nombre,
-                Correo = usuario.Email
+                usuario.Id,
+                usuario.Nombre,
+                usuario.Email,
+                Ultima = usuario.TutorSolicitudesCredenciales
+                    .OrderByDescending(s => s.FechaSolicitud)
+                    .Select(s => new
+                    {
+                        s.UrlCredencial,
+                        s.FechaSolicitud,
+                        Materias = s.SolicitudMateria.Select(sm => sm.Materia.Nombre).ToList()
+                    })
+                    .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(solicitudes);
+        var resultado = solicitudes
+            .Select(s => new TutorSolicitudDto
+            {
+                Id = s.Id,
+                Nombre = s.Nombre,
+                Correo = s.Email,
+                // Los comprobantes son privados: se entrega una URL firmada
+                // que vence (la lista se vuelve a pedir con "Actualizar").
+                UrlCredencial = blobService.GenerarUrlLectura(s.Ultima?.UrlCredencial, VigenciaComprobante),
+                FechaSolicitud = s.Ultima?.FechaSolicitud,
+                Materias = s.Ultima?.Materias ?? new List<string>()
+            })
+            .ToList();
+
+        return Ok(resultado);
     }
 
     [HttpPut("tutores/{id:int}/aprobar")]
@@ -56,7 +85,7 @@ public sealed class AdminController : ControllerBase
 
         if (tutor is null)
         {
-            return NotFound(new { message = "No se encontró una solicitud de tutor pendiente." });
+            return Problem(statusCode: 404, title: "No se encontró una solicitud de tutor pendiente.");
         }
 
         tutor.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
@@ -81,6 +110,34 @@ public sealed class AdminController : ControllerBase
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        _notificaciones.TutorAprobado(tutor.Nombre, tutor.Email);
+
+        return NoContent();
+    }
+
+    [HttpPut("tutores/{id:int}/rechazar")]
+    public async Task<IActionResult> RechazarTutor(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var aspirante = await _context.Usuarios
+            .FirstOrDefaultAsync(
+                usuario =>
+                    usuario.Id == id &&
+                    usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente,
+                cancellationToken);
+
+        if (aspirante is null)
+        {
+            return Problem(statusCode: 404, title: "No se encontró una solicitud de tutor pendiente.");
+        }
+
+        // Solo cambia el estado: el rol y los datos del usuario se conservan.
+        aspirante.EstadoAprobacionId = (int)EstadoAprobacion.Rechazado;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _notificaciones.TutorRechazado(aspirante.Nombre, aspirante.Email);
 
         return NoContent();
     }

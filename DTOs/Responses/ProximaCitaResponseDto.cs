@@ -9,5 +9,7 @@
         public string? LinkReunion { get; set; }
         public string? Notas { get; set; }
         public string Estado { get; set; } = string.Empty;
+        // Puntuación que el estudiante dio a la sesión; null si aún no la califica.
+        public int? Puntuacion { get; set; }
     }
 }

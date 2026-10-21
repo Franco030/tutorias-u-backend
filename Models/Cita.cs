@@ -25,5 +25,7 @@ public partial class Cita
 
     public virtual Materia Materia { get; set; } = null!;
 
+    public virtual Resena? Resena { get; set; }
+
     public virtual Usuario Tutor { get; set; } = null!;
 }

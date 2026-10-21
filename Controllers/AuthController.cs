@@ -3,6 +3,8 @@ using System.Security.Claims;
 using backend.DTOs.Requests;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
+using backend.Middleware;
 
 namespace backend.Controllers;
 
@@ -11,10 +13,12 @@ namespace backend.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _logger = logger;
     }
 
     [HttpPost("google")]
@@ -22,7 +26,7 @@ public class AuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.IdToken))
         {
-            return BadRequest(new { message = "El IdToken es requerido." });
+            return Problem(statusCode: 400, title: "El IdToken es requerido.");
         }
 
         try
@@ -32,11 +36,12 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Problem(statusCode: 401, title: ex.Message);
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { message = "Error al autenticar con Google.", details = ex.Message });
+            _logger.LogError(ex, "Fallo el inicio de sesion con Google.");
+            return Problem(statusCode: 500, title: "Error al autenticar con Google.");
         }
     }
 
@@ -45,7 +50,7 @@ public class AuthController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(dto.IdToken))
         {
-            return BadRequest(new { message = "El IdToken es requerido." });
+            return Problem(statusCode: 400, title: "El IdToken es requerido.");
         }
 
         try
@@ -55,15 +60,17 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Problem(statusCode: 401, title: ex.Message);
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new { message = "Error al autenticar con Microsoft.", details = ex.Message });
+            _logger.LogError(ex, "Fallo el inicio de sesion con Microsoft.");
+            return Problem(statusCode: 500, title: "Error al autenticar con Microsoft.");
         }
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
         try
@@ -73,11 +80,12 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(statusCode: 400, title: ex.Message);
         }
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         try
@@ -87,11 +95,11 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Problem(statusCode: 401, title: ex.Message);
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(statusCode: 400, title: ex.Message);
         }
     }
 
@@ -100,14 +108,32 @@ public class AuthController : ControllerBase
     {
         try
         {
-            if (string.IsNullOrEmpty(token)) return BadRequest("Token no proporcionado.");
+            if (string.IsNullOrEmpty(token)) return Problem(statusCode: 400, title: "Token no proporcionado.");
 
             await _authService.VerifyEmailAsync(token);
             return Ok(new { message = "Correo verificado exitosamente. Ya puedes iniciar sesion" });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(statusCode: 400, title: ex.Message);
+        }
+    }
+
+    [HttpGet("sesion")]
+    [Authorize]
+    public async Task<IActionResult> RefrescarSesion()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out int userId))
+            return Problem(statusCode: 401, title: "Token invalido");
+
+        try
+        {
+            return Ok(await _authService.RefrescarSesionAsync(userId));
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Problem(statusCode: 401, title: ex.Message);
         }
     }
 
@@ -120,15 +146,19 @@ public class AuthController : ControllerBase
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
             if (userIdClaim == null || !int.TryParse(userIdClaim, out int userId))
-                return Unauthorized(new { message = "Token invalido" });
+                return Problem(statusCode: 401, title: "Token invalido");
 
             var result = await _authService.AsignarRolAsync(userId, dto.NuevoRol);
 
             return Ok(result);
         }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(statusCode: 409, title: ex.Message);
+        }
         catch (Exception ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return Problem(statusCode: 400, title: ex.Message);
         }
     }
 }

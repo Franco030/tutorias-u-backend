@@ -1,8 +1,10 @@
+using backend.Authorization;
 using backend.Data;
 using backend.DTOs.Requests;
 using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Models;
+using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -23,24 +25,33 @@ namespace backend.Controllers
 
         [HttpPost("aplicar")]
         [Authorize]
-        public async Task<IActionResult> Aplicar([FromBody] AplicarTutorRequestDto request)
+        public async Task<IActionResult> Aplicar(
+            [FromBody] AplicarTutorRequestDto request,
+            [FromServices] IBlobService blobService)
         {
+            // Solo un comprobante subido a nuestro almacenamiento: así el
+            // administrador nunca abre un enlace arbitrario del aspirante.
+            if (!blobService.EsComprobantePropio(request.UrlCredencial))
+            {
+                return Problem(statusCode: 400, title: "Sube tu comprobante desde la aplicación.");
+            }
+
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
 
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int usuarioId))
             {
-                return Unauthorized(new { mensaje = "No se pudo identificar al usuario autenticado en el token." });
+                return Problem(statusCode: 401, title: "No se pudo identificar al usuario autenticado en el token.");
             }
 
             var usuario = await _context.Usuarios.FindAsync(usuarioId);
             if (usuario == null)
             {
-                return NotFound(new { mensaje = "El usuario no existe." });
+                return Problem(statusCode: 404, title: "El usuario no existe.");
             }
 
             if (usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente || usuario.EstadoAprobacionId == (int)EstadoAprobacion.Aprobado)
             {
-                return BadRequest(new { mensaje = "El usuario ya tiene una solicitud en proceso o ya es un tutor." });
+                return Problem(statusCode: 400, title: "El usuario ya tiene una solicitud en proceso o ya es un tutor.");
             }
 
             var nuevaSolicitud = new TutorSolicitudesCredenciale
@@ -78,6 +89,7 @@ namespace backend.Controllers
                     Nombre = tutor.Nombre,
                     FotoUrl = tutor.FotoUrl,
                     CalificacionPromedio = tutor.CalificacionPromedio,
+                    TotalResenas = tutor.ResenaTutors.Count(),
                     Materias = tutor.MateriaNavigation.Select(m => m.Nombre).ToList()
                 })
                 .ToListAsync();
@@ -93,7 +105,7 @@ namespace backend.Controllers
 
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int estudianteId))
             {
-                return Unauthorized(new { mensaje = "No se pudo identificar al estudiante autenticado en el token." });
+                return Problem(statusCode: 401, title: "No se pudo identificar al estudiante autenticado en el token.");
             }
 
             var estudiante = await _context.Usuarios
@@ -107,15 +119,12 @@ namespace backend.Controllers
 
             if (estudiante == null)
             {
-                return NotFound(new { mensaje = "El estudiante no existe." });
+                return Problem(statusCode: 404, title: "El estudiante no existe.");
             }
 
             if (estudiante.Rol != "Estudiante")
             {
-                return BadRequest(new
-                {
-                    mensaje = "El usuario autenticado no tiene rol de Estudiante."
-                });
+                return Problem(statusCode: 400, title: "El usuario autenticado no tiene rol de Estudiante.");
             }
 
             if (estudiante.MateriaIds.Count == 0)
@@ -137,6 +146,7 @@ namespace backend.Controllers
                     Nombre = tutor.Nombre,
                     FotoUrl = tutor.FotoUrl,
                     CalificacionPromedio = tutor.CalificacionPromedio,
+                    TotalResenas = tutor.ResenaTutors.Count(),
                     Materias = tutor.MateriaNavigation
                         .Select(materia => materia.Nombre)
                         .ToList()
@@ -155,7 +165,7 @@ namespace backend.Controllers
 
             if (tutor == null)
             {
-                return NotFound(new { mensaje = "Tutor no encontrado o no está aprobado." });
+                return Problem(statusCode: 404, title: "Tutor no encontrado o no está aprobado.");
             }
 
             var response = new backend.DTOs.TutorPerfilResponseDto
@@ -164,6 +174,7 @@ namespace backend.Controllers
                 Nombre = tutor.Nombre,
                 FotoUrl = tutor.FotoUrl,
                 CalificacionPromedio = tutor.CalificacionPromedio,
+                TotalResenas = await _context.Resenas.CountAsync(resena => resena.TutorId == tutor.Id),
                 Materias = tutor.MateriaNavigation.Select(m => m.Nombre).ToList()
             };
 
@@ -171,13 +182,13 @@ namespace backend.Controllers
         }
 
         [HttpPut("mis-materias")]
-        [Authorize(Roles = "Tutor")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
         public async Task<IActionResult> ActualizarMisMaterias([FromBody] ActualizarMateriasTutorDto request)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int usuarioId))
             {
-                return Unauthorized(new { mensaje = "No se pudo identificar al usuario autenticado." });
+                return Problem(statusCode: 401, title: "No se pudo identificar al usuario autenticado.");
             }
 
             var tutor = await _context.Usuarios
@@ -186,12 +197,12 @@ namespace backend.Controllers
 
             if (tutor == null)
             {
-                return NotFound(new { mensaje = "Usuario no encontrado." });
+                return Problem(statusCode: 404, title: "Usuario no encontrado.");
             }
 
             if (tutor.EstadoAprobacionId != (int)EstadoAprobacion.Aprobado)
             {
-                return BadRequest(new { mensaje = "El usuario no es un tutor aprobado." });
+                return Problem(statusCode: 400, title: "El usuario no es un tutor aprobado.");
             }
 
             // Limpiar las materias actuales
@@ -213,20 +224,20 @@ namespace backend.Controllers
         }
 
         [HttpPost("disponibilidad")]
-        [Authorize(Roles = "Tutor")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
         public async Task<IActionResult> GuardarDisponibilidad([FromBody] List<DisponibilidadRequestDto> request)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int tutorId))
             {
-                return Unauthorized(new { mensaje = "No se pudo identificar al tutor autenticado." });
+                return Problem(statusCode: 401, title: "No se pudo identificar al tutor autenticado.");
             }
 
             var tutorExiste = await _context.Usuarios
                 .AnyAsync(usuario => usuario.Id == tutorId && usuario.Rol == "Tutor");
             if (!tutorExiste)
             {
-                return NotFound(new { mensaje = "Tutor no encontrado." });
+                return Problem(statusCode: 404, title: "Tutor no encontrado.");
             }
 
             for (var i = 0; i < request.Count; i++)
@@ -234,12 +245,12 @@ namespace backend.Controllers
                 var bloque = request[i];
                 if (bloque.DiaSemana > 6)
                 {
-                    return BadRequest(new { mensaje = "El día de la semana debe estar entre 0 y 6." });
+                    return Problem(statusCode: 400, title: "El día de la semana debe estar entre 0 y 6.");
                 }
 
                 if (bloque.HoraFin <= bloque.HoraInicio)
                 {
-                    return BadRequest(new { mensaje = "La hora de fin debe ser posterior a la hora de inicio." });
+                    return Problem(statusCode: 400, title: "La hora de fin debe ser posterior a la hora de inicio.");
                 }
 
                 for (var j = i + 1; j < request.Count; j++)
@@ -249,7 +260,7 @@ namespace backend.Controllers
                         bloque.HoraInicio < otroBloque.HoraFin &&
                         bloque.HoraFin > otroBloque.HoraInicio)
                     {
-                        return BadRequest(new { mensaje = "El horario se cruza con otro bloque de disponibilidad." });
+                        return Problem(statusCode: 400, title: "El horario se cruza con otro bloque de disponibilidad.");
                     }
                 }
             }
@@ -288,7 +299,7 @@ namespace backend.Controllers
                 .AnyAsync(usuario => usuario.Id == id && usuario.Rol == "Tutor");
             if (!tutorExiste)
             {
-                return NotFound(new { mensaje = "Tutor no encontrado." });
+                return Problem(statusCode: 404, title: "Tutor no encontrado.");
             }
 
             var disponibilidades = await _context.TutorDisponibilidads

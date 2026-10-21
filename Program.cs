@@ -1,5 +1,8 @@
+using backend.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using System.Text;
 using backend.Data;
+using backend.Middleware;
 using backend.Services;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -14,8 +17,21 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+// Correos de citas y postulaciones: se encolan y se envían en segundo plano.
+builder.Services.AddSingleton<ColaCorreos>();
+builder.Services.AddSingleton<IColaCorreos>(sp => sp.GetRequiredService<ColaCorreos>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ColaCorreos>());
+builder.Services.AddScoped<INotificacionesCorreo, NotificacionesCorreo>();
+// Hora local de la universidad (configurable con "ZonaHoraria").
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IHoraPlataforma, HoraPlataforma>();
 builder.Services.AddScoped<IBlobService, BlobService>();
-builder.Services.AddAuthorization();
+// Endpoints de tutor: rol Tutor **y** aprobado por el administrador (ver Authorization/TutorAprobado.cs).
+builder.Services.AddScoped<IAuthorizationHandler, TutorAprobadoHandler>();
+builder.Services.AddAuthorization(options =>
+    options.AddPolicy(PoliticasAutorizacion.TutorAprobado, policy => policy
+        .RequireRole("Tutor")
+        .AddRequirements(new TutorAprobadoRequirement())));
 
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (!string.IsNullOrEmpty(jwtKey))
@@ -55,8 +71,20 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+// Errores en formato ProblemDetails con títulos en español.
+builder.Services.AddProblemDetailsEspanol();
+// Límite de intentos en inicio de sesión y registro (Middleware/LimiteAcceso.cs).
+builder.Services.AddLimiteAcceso(builder.Configuration);
 
 var app = builder.Build();
+
+// IP real del cliente detrás del proxy de Azure (para el límite de intentos).
+app.UseForwardedHeaders();
+
+// Excepciones no controladas -> 500 sin detalles internos; respuestas de error
+// sin cuerpo (401/403 del JWT, Forbid(), 404 de ruta) -> ProblemDetails.
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -67,6 +95,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("FrontendPolicy");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -76,3 +105,6 @@ app.MapControllers();
 app.MapGet("/", () => "TutoriasU esta funcionando correctamente");
 
 app.Run();
+
+// Visible para las pruebas de integración (WebApplicationFactory).
+public partial class Program;
