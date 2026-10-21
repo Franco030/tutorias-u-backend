@@ -81,6 +81,92 @@ public class AdminControllerTests
     }
 
     [Fact]
+    public async Task ObtenerSolicitudes_ShouldIncludeLatestCredentialAndSubjects()
+    {
+        await using var context = CreateContext();
+        var materia = new Materia { Id = 5, Nombre = "Cálculo" };
+        context.Materias.Add(materia);
+        context.Usuarios.Add(new Usuario
+        {
+            Id = 20,
+            Nombre = "Aspirante",
+            Email = "aspirante@ejemplo.com",
+            Rol = "Estudiante",
+            AuthProvider = "Local",
+            EstadoAprobacionId = (int)EstadoAprobacion.Pendiente
+        });
+        context.TutorSolicitudesCredenciales.AddRange(
+            new TutorSolicitudesCredenciale
+            {
+                Id = 1,
+                UsuarioId = 20,
+                UrlCredencial = "https://archivos/vieja.pdf",
+                FechaSolicitud = new DateTime(2026, 1, 1)
+            },
+            new TutorSolicitudesCredenciale
+            {
+                Id = 2,
+                UsuarioId = 20,
+                UrlCredencial = "https://archivos/nueva.pdf",
+                FechaSolicitud = new DateTime(2026, 2, 1),
+                SolicitudMateria = { new SolicitudMateria { Id = 1, MateriaId = 5, Materia = materia } }
+            });
+        await context.SaveChangesAsync();
+
+        var result = await new AdminController(context).ObtenerSolicitudes(CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var solicitud = Assert.Single(
+            Assert.IsAssignableFrom<IReadOnlyList<backend.DTOs.Responses.TutorSolicitudDto>>(ok.Value));
+        Assert.Equal("https://archivos/nueva.pdf", solicitud.UrlCredencial);
+        Assert.Equal(new DateTime(2026, 2, 1), solicitud.FechaSolicitud);
+        Assert.Equal(new[] { "Cálculo" }, solicitud.Materias);
+    }
+
+    [Fact]
+    public async Task RechazarTutor_ShouldMarkPendingRequestAsRejected()
+    {
+        await using var context = CreateContext();
+        context.Usuarios.Add(new Usuario
+        {
+            Id = 30,
+            Nombre = "Aspirante",
+            Email = "rechazo@ejemplo.com",
+            Rol = "Estudiante",
+            AuthProvider = "Local",
+            EstadoAprobacionId = (int)EstadoAprobacion.Pendiente
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new AdminController(context).RechazarTutor(30, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        var userInDb = await context.Usuarios.FindAsync(30);
+        Assert.Equal((int)EstadoAprobacion.Rechazado, userInDb!.EstadoAprobacionId);
+        Assert.Equal("Estudiante", userInDb.Rol);
+    }
+
+    [Fact]
+    public async Task RechazarTutor_ShouldReturnNotFoundWhenNotPending()
+    {
+        await using var context = CreateContext();
+        context.Usuarios.Add(new Usuario
+        {
+            Id = 31,
+            Nombre = "Tutor",
+            Email = "aprobado2@ejemplo.com",
+            Rol = "Tutor",
+            AuthProvider = "Local",
+            EstadoAprobacionId = (int)EstadoAprobacion.Aprobado
+        });
+        await context.SaveChangesAsync();
+
+        var result = await new AdminController(context).RechazarTutor(31, CancellationToken.None);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
     public void Controller_ShouldRequireAdministratorRole()
     {
         var authorize = Assert.Single(
