@@ -30,7 +30,7 @@ public class EstudiantesController : ControllerBase
 
         if (userIdClaim == null || !int.TryParse(userIdClaim, out int estudianteId))
         {
-            return Unauthorized(new { message = "Token inválido." });
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var estudiante = await _context.Usuarios
@@ -41,15 +41,12 @@ public class EstudiantesController : ControllerBase
 
         if (estudiante == null)
         {
-            return NotFound(new { message = "Usuario no encontrado." });
+            return Problem(statusCode: 404, title: "Usuario no encontrado.");
         }
 
         if (estudiante.Rol != "Estudiante")
         {
-            return BadRequest(new
-            {
-                message = "El usuario autenticado no tiene rol de Estudiante."
-            });
+            return Problem(statusCode: 400, title: "El usuario autenticado no tiene rol de Estudiante.");
         }
 
         var materiaIds = dto.MateriaIds
@@ -58,10 +55,7 @@ public class EstudiantesController : ControllerBase
 
         if (materiaIds.Count == 0)
         {
-            return BadRequest(new
-            {
-                message = "Debes seleccionar al menos una materia."
-            });
+            return Problem(statusCode: 400, title: "Debes seleccionar al menos una materia.");
         }
 
         var materias = await _context.Materias
@@ -70,10 +64,7 @@ public class EstudiantesController : ControllerBase
 
         if (materias.Count != materiaIds.Count)
         {
-            return BadRequest(new
-            {
-                message = "Una o más materias seleccionadas no existen."
-            });
+            return Problem(statusCode: 400, title: "Una o más materias seleccionadas no existen.");
         }
 
         estudiante.Materia.Clear();
@@ -102,7 +93,7 @@ public class EstudiantesController : ControllerBase
 
         if (userIdClaim == null || !int.TryParse(userIdClaim, out int estudianteId))
         {
-            return Unauthorized(new { message = "Token inválido." });
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var estudiante = await _context.Usuarios
@@ -114,7 +105,7 @@ public class EstudiantesController : ControllerBase
 
         if (estudiante == null)
         {
-            return NotFound(new { message = "Usuario no encontrado." });
+            return Problem(statusCode: 404, title: "Usuario no encontrado.");
         }
 
         var intereses = estudiante.Materia.Select(m => new backend.DTOs.Responses.MateriaResponseDto

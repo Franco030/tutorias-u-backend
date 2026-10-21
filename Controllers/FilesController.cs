@@ -29,7 +29,7 @@ namespace backend.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Error = ex.Message });
+                return Problem(statusCode: 400, title: ex.Message);
             }
         }
     }

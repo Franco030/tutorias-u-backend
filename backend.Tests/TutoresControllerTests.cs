@@ -129,10 +129,10 @@ namespace backend.Tests
             await _dbContext.SaveChangesAsync();
 
             var result = await _controller.GetTutorProfile(tutorPendiente.Id);
-            Assert.IsType<NotFoundObjectResult>(result);
+            ProblemaAssert.EsProblema(result, 404);
 
             var resultInexistente = await _controller.GetTutorProfile(999);
-            Assert.IsType<NotFoundObjectResult>(resultInexistente);
+            ProblemaAssert.EsProblema(resultInexistente, 404);
         }
 
         [Fact]
@@ -209,7 +209,7 @@ namespace backend.Tests
                 }
             });
 
-            Assert.IsType<BadRequestObjectResult>(result);
+            ProblemaAssert.EsProblema(result, 400);
             var savedBlock = Assert.Single(await _dbContext.TutorDisponibilidads.ToListAsync());
             Assert.Equal(existingBlock.Id, savedBlock.Id);
             Assert.Equal((byte)DayOfWeek.Friday, savedBlock.DiaSemana);

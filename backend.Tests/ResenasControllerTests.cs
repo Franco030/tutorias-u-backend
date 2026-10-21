@@ -31,7 +31,7 @@ public class ResenasControllerTests
             new Claim(ClaimTypes.Role, "Estudiante")
         }, "mock"));
 
-        return new ResenasController(context)
+        return new ResenasController(context, HoraFija.Actual())
         {
             ControllerContext = new ControllerContext
             {
@@ -94,7 +94,7 @@ public class ResenasControllerTests
 
         var result = await CrearController(context).CrearResena(new CrearResenaRequestDto { CitaId = 10, Puntuacion = 5 });
 
-        Assert.IsType<ConflictObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 409);
         Assert.Equal(1, await context.Resenas.CountAsync());
     }
 
@@ -106,7 +106,7 @@ public class ResenasControllerTests
 
         var result = await CrearController(context).CrearResena(new CrearResenaRequestDto { CitaId = 10, Puntuacion = 5 });
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 400);
         Assert.Empty(context.Resenas);
     }
 
@@ -153,6 +153,6 @@ public class ResenasControllerTests
 
         var result = await CrearController(context).ObtenerResenasTutor(EstudianteId);
 
-        Assert.IsType<NotFoundObjectResult>(result.Result);
+        ProblemaAssert.EsProblema(result.Result, 404);
     }
 }

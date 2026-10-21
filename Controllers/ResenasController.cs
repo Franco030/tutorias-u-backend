@@ -2,6 +2,7 @@ using System.Security.Claims;
 using backend.Data;
 using backend.DTOs.Resenas;
 using backend.Models;
+using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +16,12 @@ public class ResenasController : ControllerBase
     private const int TamanoPaginaMaximo = 50;
 
     private readonly AppDbContext _context;
+    private readonly IHoraPlataforma _hora;
 
-    public ResenasController(AppDbContext context)
+    public ResenasController(AppDbContext context, IHoraPlataforma hora)
     {
         _context = context;
+        _hora = hora;
     }
 
     [HttpPost]
@@ -30,13 +33,13 @@ public class ResenasController : ControllerBase
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var estudianteId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([request.CitaId], cancellationToken);
         if (cita == null)
         {
-            return NotFound(new { mensaje = "La tutoría no existe." });
+            return Problem(statusCode: 404, title: "La tutoría no existe.");
         }
 
         if (cita.EstudianteId != estudianteId)
@@ -46,13 +49,13 @@ public class ResenasController : ControllerBase
 
         if (cita.Estado != "Completada")
         {
-            return BadRequest(new { mensaje = "Solo puedes calificar tutorías completadas." });
+            return Problem(statusCode: 400, title: "Solo puedes calificar tutorías completadas.");
         }
 
         var yaCalificada = await _context.Resenas.AnyAsync(resena => resena.CitaId == cita.Id, cancellationToken);
         if (yaCalificada)
         {
-            return Conflict(new { mensaje = "Ya calificaste esta tutoría." });
+            return Problem(statusCode: 409, title: "Ya calificaste esta tutoría.");
         }
 
         var resena = new Resena
@@ -62,7 +65,7 @@ public class ResenasController : ControllerBase
             TutorId = cita.TutorId,
             Puntuacion = request.Puntuacion,
             Comentario = string.IsNullOrWhiteSpace(request.Comentario) ? null : request.Comentario.Trim(),
-            FechaCreacion = DateTime.UtcNow
+            FechaCreacion = _hora.Ahora
         };
 
         _context.Resenas.Add(resena);
@@ -73,7 +76,7 @@ public class ResenasController : ControllerBase
         catch (DbUpdateException)
         {
             // Dos envíos simultáneos: el índice único de CitaId rechaza el segundo.
-            return Conflict(new { mensaje = "Ya calificaste esta tutoría." });
+            return Problem(statusCode: 409, title: "Ya calificaste esta tutoría.");
         }
 
         var promedio = await _context.Resenas
@@ -120,7 +123,7 @@ public class ResenasController : ControllerBase
             .AnyAsync(usuario => usuario.Id == tutorId && usuario.Rol == "Tutor", cancellationToken);
         if (!tutorExiste)
         {
-            return NotFound(new { mensaje = "Tutor no encontrado." });
+            return Problem(statusCode: 404, title: "Tutor no encontrado.");
         }
 
         pagina = Math.Max(1, pagina);

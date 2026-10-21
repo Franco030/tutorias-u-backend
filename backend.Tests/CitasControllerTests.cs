@@ -118,7 +118,7 @@ public class CitasControllerTests
 
         var result = await controller.ObtenerPendientes();
 
-        Assert.IsType<UnauthorizedResult>(result.Result);
+        ProblemaAssert.EsProblema(result.Result, 401);
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class CitasControllerTests
         // Arrange
         var dbName = Guid.NewGuid().ToString();
         var context = GetDbContext(dbName);
-        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance, HoraFija.Actual());
 
         var user = new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
         {
@@ -177,7 +177,7 @@ public class CitasControllerTests
         // Arrange
         var dbName = Guid.NewGuid().ToString();
         var context = GetDbContext(dbName);
-        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance, HoraFija.Actual());
 
         var user = new ClaimsPrincipal(new ClaimsIdentity(new Claim[]
         {
@@ -201,8 +201,7 @@ public class CitasControllerTests
         var result = await controller.AgendarCita(request);
 
         // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal("No puedes agendar en el pasado", badRequestResult.Value);
+        ProblemaAssert.EsProblema(result, 400, "No puedes agendar en el pasado");
     }
 
     [Fact]
@@ -220,7 +219,7 @@ public class CitasControllerTests
             FechaHoraFin = inicio.AddHours(1)
         });
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 400);
         Assert.Empty(await context.Citas.ToListAsync());
     }
 
@@ -247,7 +246,7 @@ public class CitasControllerTests
             FechaHoraFin = inicio.AddHours(1)
         });
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 400);
         Assert.Empty(await context.Citas.ToListAsync());
     }
 
@@ -281,8 +280,7 @@ public class CitasControllerTests
             FechaHoraFin = inicio.AddHours(1)
         });
 
-        var badRequest = Assert.IsType<BadRequestObjectResult>(result);
-        Assert.Equal("El tutor ya tiene un compromiso en este horario", badRequest.Value);
+        ProblemaAssert.EsProblema(result, 400, "El tutor ya tiene un compromiso en este horario");
         Assert.Single(await context.Citas.ToListAsync());
     }
 
@@ -316,7 +314,7 @@ public class CitasControllerTests
             FechaHoraFin = inicio.AddHours(1)
         });
 
-        Assert.IsType<BadRequestObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 400);
         Assert.Single(await context.Citas.ToListAsync());
     }
 
@@ -532,7 +530,7 @@ public class CitasControllerTests
         var result = await controller.AceptarCita(999, request);
 
         // Assert
-        Assert.IsType<NotFoundResult>(result);
+        ProblemaAssert.EsProblema(result, 404);
     }
 
     [Fact]
@@ -572,7 +570,7 @@ public class CitasControllerTests
 
         var result = await controller.AceptarCita(1, new AceptarCitaRequestDto());
 
-        Assert.IsType<UnauthorizedResult>(result);
+        ProblemaAssert.EsProblema(result, 401);
     }
 
     [Fact]
@@ -611,7 +609,7 @@ public class CitasControllerTests
 
         var result = await controller.RechazarCita(999);
 
-        Assert.IsType<NotFoundResult>(result);
+        ProblemaAssert.EsProblema(result, 404);
     }
 
     [Fact]
@@ -650,7 +648,7 @@ public class CitasControllerTests
 
         var result = await controller.RechazarCita(1);
 
-        Assert.IsType<UnauthorizedResult>(result);
+        ProblemaAssert.EsProblema(result, 401);
     }
 
     [Fact]
@@ -684,7 +682,7 @@ public class CitasControllerTests
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
         }
-        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance);
+        var controller = new CitasController(context, Mock.Of<INotificacionesCorreo>(), NullLogger<CitasController>.Instance, HoraFija.Actual());
         var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "mock"));
         controller.ControllerContext = new ControllerContext
         {

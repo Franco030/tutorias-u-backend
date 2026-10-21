@@ -1,5 +1,6 @@
 using System.Text;
 using backend.Data;
+using backend.Middleware;
 using backend.Services;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,6 +20,9 @@ builder.Services.AddSingleton<ColaCorreos>();
 builder.Services.AddSingleton<IColaCorreos>(sp => sp.GetRequiredService<ColaCorreos>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColaCorreos>());
 builder.Services.AddScoped<INotificacionesCorreo, NotificacionesCorreo>();
+// Hora local de la universidad (configurable con "ZonaHoraria").
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IHoraPlataforma, HoraPlataforma>();
 builder.Services.AddScoped<IBlobService, BlobService>();
 builder.Services.AddAuthorization();
 
@@ -60,8 +64,15 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+// Errores en formato ProblemDetails con títulos en español.
+builder.Services.AddProblemDetailsEspanol();
 
 var app = builder.Build();
+
+// Excepciones no controladas -> 500 sin detalles internos; respuestas de error
+// sin cuerpo (401/403 del JWT, Forbid(), 404 de ruta) -> ProblemDetails.
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

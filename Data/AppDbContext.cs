@@ -34,14 +34,6 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Usuario> Usuarios { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Name=ConnectionStrings:DefaultConnection");
-        }
-    }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Categoria>(entity =>
@@ -58,6 +50,10 @@ public partial class AppDbContext : DbContext
             entity.HasIndex(e => new { e.EstudianteId, e.FechaHoraInicio }, "IX_Citas_EstudianteId");
 
             entity.HasIndex(e => new { e.TutorId, e.FechaHoraInicio }, "IX_Citas_TutorId");
+
+            entity.HasIndex(e => new { e.TutorId, e.FechaHoraInicio }, "UX_Citas_Tutor_Horario")
+                .IsUnique()
+                .HasFilter("([Estado] IN ('Pendiente', 'Aceptada'))");
 
             entity.Property(e => e.Estado)
                 .HasMaxLength(50)

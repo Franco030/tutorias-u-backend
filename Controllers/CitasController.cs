@@ -21,15 +21,18 @@ public class CitasController : ControllerBase
     private readonly AppDbContext _context;
     private readonly INotificacionesCorreo _notificaciones;
     private readonly ILogger<CitasController> _logger;
+    private readonly IHoraPlataforma _hora;
 
     public CitasController(
         AppDbContext context,
         INotificacionesCorreo notificaciones,
-        ILogger<CitasController> logger)
+        ILogger<CitasController> logger,
+        IHoraPlataforma hora)
     {
         _context = context;
         _notificaciones = notificaciones;
         _logger = logger;
+        _hora = hora;
     }
 
     // Avisa por correo después de guardar. Nunca lanza: si falla la consulta de
@@ -70,25 +73,30 @@ public class CitasController : ControllerBase
         [FromBody] CrearCitaRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        if (request.FechaHoraInicio < DateTime.UtcNow)
+        // Las horas llegan en la hora local de la plataforma; si un cliente
+        // antiguo las manda con "Z", se toman igual como hora local.
+        var fechaHoraInicio = DateTime.SpecifyKind(request.FechaHoraInicio, DateTimeKind.Unspecified);
+        var fechaHoraFin = DateTime.SpecifyKind(request.FechaHoraFin, DateTimeKind.Unspecified);
+
+        if (fechaHoraInicio < _hora.Ahora)
         {
-            return BadRequest("No puedes agendar en el pasado");
+            return Problem(statusCode: 400, title: "No puedes agendar en el pasado");
         }
 
-        if (request.FechaHoraFin <= request.FechaHoraInicio ||
-            request.FechaHoraFin.Date != request.FechaHoraInicio.Date)
+        if (fechaHoraFin <= fechaHoraInicio ||
+            fechaHoraFin.Date != fechaHoraInicio.Date)
         {
-            return BadRequest("El bloque de la cita no es válido");
+            return Problem(statusCode: 400, title: "El bloque de la cita no es válido");
         }
 
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int estudianteId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var compromisoExistente = await _context.Citas.AnyAsync(cita =>
-            cita.FechaHoraInicio == request.FechaHoraInicio &&
+            cita.FechaHoraInicio == fechaHoraInicio &&
             cita.Estado != "Cancelada" &&
             cita.Estado != "Rechazada" &&
             (cita.TutorId == request.TutorId || cita.EstudianteId == estudianteId),
@@ -96,12 +104,12 @@ public class CitasController : ControllerBase
 
         if (compromisoExistente)
         {
-            return BadRequest("El tutor ya tiene un compromiso en este horario");
+            return Problem(statusCode: 400, title: "El tutor ya tiene un compromiso en este horario");
         }
 
-        var diaSemana = (byte)request.FechaHoraInicio.DayOfWeek;
-        var horaInicio = TimeOnly.FromDateTime(request.FechaHoraInicio);
-        var horaFin = TimeOnly.FromDateTime(request.FechaHoraFin);
+        var diaSemana = (byte)fechaHoraInicio.DayOfWeek;
+        var horaInicio = TimeOnly.FromDateTime(fechaHoraInicio);
+        var horaFin = TimeOnly.FromDateTime(fechaHoraFin);
         var disponibilidadConfigurada = await _context.TutorDisponibilidads
             .AnyAsync(disponibilidad =>
                 disponibilidad.TutorId == request.TutorId &&
@@ -112,7 +120,7 @@ public class CitasController : ControllerBase
 
         if (!disponibilidadConfigurada)
         {
-            return BadRequest("El bloque solicitado no coincide con la disponibilidad del tutor");
+            return Problem(statusCode: 400, title: "El bloque solicitado no coincide con la disponibilidad del tutor");
         }
 
         var cita = new Cita
@@ -120,12 +128,21 @@ public class CitasController : ControllerBase
             EstudianteId = estudianteId,
             TutorId = request.TutorId,
             MateriaId = request.MateriaId,
-            FechaHoraInicio = request.FechaHoraInicio,
+            FechaHoraInicio = fechaHoraInicio,
             Estado = "Pendiente"
         };
 
         _context.Citas.Add(cita);
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Dos reservas simultáneas del mismo bloque: el índice único
+            // UX_Citas_Tutor_Horario rechaza la segunda.
+            return Problem(statusCode: 409, title: "El tutor ya tiene un compromiso en este horario");
+        }
 
         await NotificarAsync(cita.Id, _notificaciones.CitaSolicitada, cancellationToken);
 
@@ -142,13 +159,13 @@ public class CitasController : ControllerBase
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
@@ -180,13 +197,13 @@ public class CitasController : ControllerBase
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
@@ -221,7 +238,7 @@ public class CitasController : ControllerBase
         if (string.IsNullOrEmpty(userIdClaim) ||
             !int.TryParse(userIdClaim, out int tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var citas = await _context.Citas
@@ -257,10 +274,10 @@ public class CitasController : ControllerBase
 
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
         {
-            return Unauthorized(new { mensaje = "Usuario no autorizado o token inválido." });
+            return Problem(statusCode: 401, title: "Usuario no autorizado o token inválido.");
         }
 
-        var ahoraUtc = DateTime.UtcNow;
+        var ahora = _hora.Ahora;
 
         IQueryable<ProximaCitaResponseDto> query;
 
@@ -270,7 +287,7 @@ public class CitasController : ControllerBase
                 .AsNoTracking()
                 .Where(c => c.EstudianteId == userId &&
                             (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahoraUtc)
+                            c.FechaHoraInicio >= ahora)
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -289,7 +306,7 @@ public class CitasController : ControllerBase
                 .AsNoTracking()
                 .Where(c => c.TutorId == userId &&
                             (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahoraUtc)
+                            c.FechaHoraInicio >= ahora)
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -347,13 +364,13 @@ public class CitasController : ControllerBase
                        ?? User.FindFirst("id")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != userId && cita.EstudianteId != userId)
@@ -363,7 +380,7 @@ public class CitasController : ControllerBase
 
         if (cita.Estado != "Pendiente" && cita.Estado != "Aceptada")
         {
-            return BadRequest("Solo se pueden cancelar citas pendientes o aceptadas");
+            return Problem(statusCode: 400, title: "Solo se pueden cancelar citas pendientes o aceptadas");
         }
 
         if (!string.IsNullOrWhiteSpace(request.Motivo))
@@ -397,17 +414,17 @@ public class CitasController : ControllerBase
 
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
-        var ahoraUtc = DateTime.UtcNow;
+        var ahora = _hora.Ahora;
         var citasQuery = _context.Citas
             .Where(cita =>
                 (userRole == "Estudiante" && cita.EstudianteId == userId) ||
                 (userRole == "Tutor" && cita.TutorId == userId));
 
         var citasCompletadas = await citasQuery
-            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio < ahoraUtc)
+            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio < ahora)
             .ToListAsync(cancellationToken);
 
         foreach (var cita in citasCompletadas)
@@ -423,7 +440,7 @@ public class CitasController : ControllerBase
         var historial = await citasQuery
             .AsNoTracking()
             .Where(cita =>
-                cita.FechaHoraInicio < ahoraUtc ||
+                cita.FechaHoraInicio < ahora ||
                 cita.Estado == "Completada" ||
                 cita.Estado == "Cancelada" ||
                 cita.Estado == "Rechazada")
@@ -455,13 +472,13 @@ public class CitasController : ControllerBase
                        ?? User.FindFirst("id")?.Value;
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var tutorId))
         {
-            return Unauthorized();
+            return Problem(statusCode: 401, title: "Token inválido.");
         }
 
         var cita = await _context.Citas.FindAsync([id], cancellationToken);
         if (cita == null)
         {
-            return NotFound();
+            return Problem(statusCode: 404, title: "La cita no existe.");
         }
 
         if (cita.TutorId != tutorId)
@@ -471,7 +488,7 @@ public class CitasController : ControllerBase
 
         if (cita.Estado != "Aceptada")
         {
-            return BadRequest("Solo se pueden completar citas aceptadas");
+            return Problem(statusCode: 400, title: "Solo se pueden completar citas aceptadas");
         }
 
         cita.Estado = "Completada";

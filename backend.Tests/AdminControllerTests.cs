@@ -165,7 +165,7 @@ public class AdminControllerTests
 
         var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, CancellationToken.None);
 
-        Assert.IsType<NotFoundObjectResult>(result);
+        ProblemaAssert.EsProblema(result, 404);
     }
 
     [Fact]

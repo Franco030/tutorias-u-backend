@@ -55,7 +55,7 @@ public class NotificacionesCorreoTests
             new Claim(ClaimTypes.Role, rol)
         }, "mock"));
 
-        return new CitasController(context, notificaciones, NullLogger<CitasController>.Instance)
+        return new CitasController(context, notificaciones, NullLogger<CitasController>.Instance, HoraFija.Actual())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = user } }
         };

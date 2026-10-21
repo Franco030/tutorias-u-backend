@@ -297,6 +297,26 @@ namespace backend.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        // Token y datos actuales del usuario: el rol y el estado de aprobación
+        // pueden cambiar (p. ej. cuando el administrador aprueba a un tutor).
+        public async Task<AuthResponseDto> RefrescarSesionAsync(int usuarioId)
+        {
+            var usuario = await _context.Usuarios.FindAsync(usuarioId)
+                ?? throw new UnauthorizedAccessException("Usuario no encontrado");
+
+            return new AuthResponseDto
+            {
+                Token = GenerateJwtToken(usuario),
+                Id = usuario.Id,
+                Email = usuario.Email,
+                Nombre = usuario.Nombre,
+                Rol = usuario.Rol,
+                FotoUrl = usuario.FotoUrl,
+                OnboardingCompleto = usuario.OnboardingCompleto,
+                EstadoAprobacion = ((EstadoAprobacion)usuario.EstadoAprobacionId).ToString()
+            };
+        }
+
         public async Task<AuthResponseDto> AsignarRolAsync(int usuarioId, string nuevoRol)
         {
             if (nuevoRol != "Estudiante" && nuevoRol != "Tutor" && nuevoRol != "Administrador")

@@ -17,3 +17,11 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Citas_EstudianteId' AN
 BEGIN
     CREATE INDEX IX_Citas_EstudianteId ON dbo.Citas (EstudianteId, FechaHoraInicio);
 END;
+
+-- Un tutor no puede tener dos citas activas en el mismo horario. Evita la doble
+-- reserva cuando dos estudiantes agendan el mismo bloque al mismo tiempo.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_Citas_Tutor_Horario' AND object_id = OBJECT_ID('dbo.Citas'))
+BEGIN
+    CREATE UNIQUE INDEX UX_Citas_Tutor_Horario ON dbo.Citas (TutorId, FechaHoraInicio)
+    WHERE Estado IN ('Pendiente', 'Aceptada');
+END;

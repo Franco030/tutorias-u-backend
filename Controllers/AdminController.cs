@@ -80,7 +80,7 @@ public sealed class AdminController : ControllerBase
 
         if (tutor is null)
         {
-            return NotFound(new { message = "No se encontró una solicitud de tutor pendiente." });
+            return Problem(statusCode: 404, title: "No se encontró una solicitud de tutor pendiente.");
         }
 
         tutor.EstadoAprobacionId = (int)EstadoAprobacion.Aprobado;
@@ -125,7 +125,7 @@ public sealed class AdminController : ControllerBase
 
         if (aspirante is null)
         {
-            return NotFound(new { message = "No se encontró una solicitud de tutor pendiente." });
+            return Problem(statusCode: 404, title: "No se encontró una solicitud de tutor pendiente.");
         }
 
         // Solo cambia el estado: el rol y los datos del usuario se conservan.
