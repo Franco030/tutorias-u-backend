@@ -37,6 +37,10 @@ public partial class Usuario
 
     public virtual EstadosAprobacion EstadoAprobacion { get; set; } = null!;
 
+    public virtual ICollection<Resena> ResenaEstudiantes { get; set; } = new List<Resena>();
+
+    public virtual ICollection<Resena> ResenaTutors { get; set; } = new List<Resena>();
+
     public virtual ICollection<TutorDisponibilidad> TutorDisponibilidads { get; set; } = new List<TutorDisponibilidad>();
 
     public virtual ICollection<TutorSolicitudesCredenciale> TutorSolicitudesCredenciales { get; set; } = new List<TutorSolicitudesCredenciale>();

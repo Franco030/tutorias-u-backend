@@ -78,6 +78,7 @@ namespace backend.Controllers
                     Nombre = tutor.Nombre,
                     FotoUrl = tutor.FotoUrl,
                     CalificacionPromedio = tutor.CalificacionPromedio,
+                    TotalResenas = tutor.ResenaTutors.Count(),
                     Materias = tutor.MateriaNavigation.Select(m => m.Nombre).ToList()
                 })
                 .ToListAsync();
@@ -137,6 +138,7 @@ namespace backend.Controllers
                     Nombre = tutor.Nombre,
                     FotoUrl = tutor.FotoUrl,
                     CalificacionPromedio = tutor.CalificacionPromedio,
+                    TotalResenas = tutor.ResenaTutors.Count(),
                     Materias = tutor.MateriaNavigation
                         .Select(materia => materia.Nombre)
                         .ToList()
@@ -164,6 +166,7 @@ namespace backend.Controllers
                 Nombre = tutor.Nombre,
                 FotoUrl = tutor.FotoUrl,
                 CalificacionPromedio = tutor.CalificacionPromedio,
+                TotalResenas = await _context.Resenas.CountAsync(resena => resena.TutorId == tutor.Id),
                 Materias = tutor.MateriaNavigation.Select(m => m.Nombre).ToList()
             };
 

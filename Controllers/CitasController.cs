@@ -369,7 +369,8 @@ public class CitasController : ControllerBase
                 FechaHoraInicio = cita.FechaHoraInicio,
                 LinkReunion = cita.LinkReunion,
                 Notas = cita.Notas,
-                Estado = cita.Estado
+                Estado = cita.Estado,
+                Puntuacion = cita.Resena == null ? null : cita.Resena.Puntuacion
             })
             .ToListAsync(cancellationToken);
 

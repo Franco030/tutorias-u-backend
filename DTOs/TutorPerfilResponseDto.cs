@@ -6,6 +6,7 @@ namespace backend.DTOs
         public string Nombre { get; set; } = null!;
         public string? FotoUrl { get; set; }
         public decimal? CalificacionPromedio { get; set; }
+        public int TotalResenas { get; set; }
         public List<string> Materias { get; set; } = new List<string>();
     }
 }
