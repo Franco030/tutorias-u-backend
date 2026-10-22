@@ -15,4 +15,6 @@ public class CitaPendienteResponseDto
     public DateTime FechaHoraInicio { get; set; }
 
     public string Estado { get; set; } = string.Empty;
+
+    public string? Tema { get; set; }
 }

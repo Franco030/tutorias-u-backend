@@ -31,6 +31,12 @@ public partial class Usuario
 
     public decimal? CalificacionPromedio { get; set; }
 
+    public int AntelacionMinimaHoras { get; set; }
+
+    public string? LinkReunion { get; set; }
+
+    public virtual ICollection<Bloqueo> Bloqueos { get; set; } = new List<Bloqueo>();
+
     public virtual ICollection<Cita> CitaEstudiantes { get; set; } = new List<Cita>();
 
     public virtual ICollection<Cita> CitaTutors { get; set; } = new List<Cita>();

@@ -16,6 +16,8 @@ public partial class AppDbContext : DbContext
     {
     }
 
+    public virtual DbSet<Bloqueo> Bloqueos { get; set; }
+
     public virtual DbSet<Categoria> Categorias { get; set; }
 
     public virtual DbSet<Cita> Citas { get; set; }
@@ -36,6 +38,17 @@ public partial class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Bloqueo>(entity =>
+        {
+            entity.HasIndex(e => new { e.TutorId, e.Fecha }, "UQ_Bloqueos_Tutor_Fecha").IsUnique();
+
+            entity.Property(e => e.Motivo).HasMaxLength(200);
+
+            entity.HasOne(d => d.Tutor).WithMany(p => p.Bloqueos)
+                .HasForeignKey(d => d.TutorId)
+                .HasConstraintName("FK_Bloqueos_Tutor");
+        });
+
         modelBuilder.Entity<Categoria>(entity =>
         {
             entity.HasIndex(e => e.Nombre, "UQ_Categorias_Nombre").IsUnique();
@@ -62,6 +75,7 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(255)
                 .IsUnicode(false);
             entity.Property(e => e.Notas).IsUnicode(false);
+            entity.Property(e => e.Tema).HasMaxLength(500);
 
             entity.HasOne(d => d.Estudiante).WithMany(p => p.CitaEstudiantes)
                 .HasForeignKey(d => d.EstudianteId)
@@ -168,6 +182,7 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.Email, "UQ__Usuarios__A9D105341BC20FE4").IsUnique();
 
+            entity.Property(e => e.AntelacionMinimaHoras).HasDefaultValue(12, "DF_Usuarios_AntelacionMinimaHoras");
             entity.Property(e => e.AuthProvider).HasMaxLength(50);
             entity.Property(e => e.CalificacionPromedio)
                 .HasDefaultValue(0.00m)
@@ -176,6 +191,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.EstadoAprobacionId).HasDefaultValue(1, "DF__Usuarios__EstadoAprobacionId");
             entity.Property(e => e.FechaRegistro).HasDefaultValueSql("(getdate())");
             entity.Property(e => e.FotoUrl).HasMaxLength(500);
+            entity.Property(e => e.LinkReunion)
+                .HasMaxLength(255)
+                .IsUnicode(false);
             entity.Property(e => e.Nombre).HasMaxLength(100);
             entity.Property(e => e.ProviderId).HasMaxLength(100);
             entity.Property(e => e.Rol)

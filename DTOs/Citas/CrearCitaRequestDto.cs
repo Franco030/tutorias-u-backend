@@ -16,4 +16,8 @@ public class CrearCitaRequestDto
 
     [Required]
     public DateTime FechaHoraFin { get; set; }
+
+    // Qué quiere repasar el estudiante (opcional).
+    [MaxLength(500, ErrorMessage = "El tema no puede superar los 500 caracteres.")]
+    public string? Tema { get; set; }
 }
