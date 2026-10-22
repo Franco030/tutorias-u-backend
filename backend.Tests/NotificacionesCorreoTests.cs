@@ -146,10 +146,10 @@ public class NotificacionesCorreoTests
         var controller = new AdminController(context, notificaciones.Object);
 
         await controller.AprobarTutor(40, CancellationToken.None);
-        await controller.RechazarTutor(41, CancellationToken.None);
+        await controller.RechazarTutor(41, new RechazarTutorRequest("Documento ilegible"), CancellationToken.None);
 
         notificaciones.Verify(n => n.TutorAprobado("Lucía Campos", "lu@example.com"), Times.Once);
-        notificaciones.Verify(n => n.TutorRechazado("Diego Salinas", "die@example.com"), Times.Once);
+        notificaciones.Verify(n => n.TutorRechazado("Diego Salinas", "die@example.com", "Documento ilegible"), Times.Once);
     }
 
     private static (NotificacionesCorreo servicio, List<CorreoPendiente> enviados) CrearServicio()

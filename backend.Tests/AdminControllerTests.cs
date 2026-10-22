@@ -140,7 +140,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(30, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(30, new RechazarTutorRequest("Credencial inválida"), CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         var userInDb = await context.Usuarios.FindAsync(30);
@@ -163,7 +163,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, new RechazarTutorRequest("Credencial inválida"), CancellationToken.None);
 
         ProblemaAssert.EsProblema(result, 404);
     }
