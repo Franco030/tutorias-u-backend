@@ -1,3 +1,4 @@
+using backend.DTOs.Requests;
 using backend.Services.Interfaces;
 using Moq;
 using backend.Controllers;
@@ -140,7 +141,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(30, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(30, new RechazarTutorRequest("Credencial inválida"), CancellationToken.None);
 
         Assert.IsType<NoContentResult>(result);
         var userInDb = await context.Usuarios.FindAsync(30);
@@ -163,7 +164,7 @@ public class AdminControllerTests
         });
         await context.SaveChangesAsync();
 
-        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, CancellationToken.None);
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>()).RechazarTutor(31, new RechazarTutorRequest("Credencial inválida"), CancellationToken.None);
 
         ProblemaAssert.EsProblema(result, 404);
     }
@@ -184,6 +185,30 @@ public class AdminControllerTests
             .Options;
 
         return new AppDbContext(options);
+    }
+
+    [Fact]
+    public async Task RechazarTutor_RechazaMotivosDeMasDe500Caracteres()
+    {
+        var context = CreateContext();
+        var result = await new AdminController(context, Mock.Of<INotificacionesCorreo>())
+            .RechazarTutor(30, new RechazarTutorRequest(new string('x', 501)), CancellationToken.None);
+
+        ProblemaAssert.EsProblema(result, 400, "El motivo no puede superar los 500 caracteres.");
+    }
+
+    [Fact]
+    public async Task RechazarTutor_FuncionaSinMotivo()
+    {
+        var context = CreateContext();
+        context.Usuarios.Add(new Usuario { Id = 32, Nombre = "Sin Motivo", Email = "sm@example.com", Rol = "Estudiante", AuthProvider = "Local", EstadoAprobacionId = (int)EstadoAprobacion.Pendiente });
+        await context.SaveChangesAsync();
+        var notificaciones = new Mock<INotificacionesCorreo>();
+
+        var result = await new AdminController(context, notificaciones.Object).RechazarTutor(32, null, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        notificaciones.Verify(n => n.TutorRechazado("Sin Motivo", "sm@example.com", null), Times.Once);
     }
 
     // Firma "de mentira": devuelve la misma URL para comparar en las pruebas.

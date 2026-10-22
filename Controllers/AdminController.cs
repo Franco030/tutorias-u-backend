@@ -1,9 +1,11 @@
 using backend.Data;
+using backend.DTOs.Requests;
 using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
@@ -119,8 +121,15 @@ public sealed class AdminController : ControllerBase
     [HttpPut("tutores/{id:int}/rechazar")]
     public async Task<IActionResult> RechazarTutor(
         int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RechazarTutorRequest? request,
         CancellationToken cancellationToken)
     {
+        var motivo = request?.Motivo?.Trim();
+        if (motivo?.Length > 500)
+        {
+            return Problem(statusCode: 400, title: "El motivo no puede superar los 500 caracteres.");
+        }
+
         var aspirante = await _context.Usuarios
             .FirstOrDefaultAsync(
                 usuario =>
@@ -137,7 +146,7 @@ public sealed class AdminController : ControllerBase
         aspirante.EstadoAprobacionId = (int)EstadoAprobacion.Rechazado;
         await _context.SaveChangesAsync(cancellationToken);
 
-        _notificaciones.TutorRechazado(aspirante.Nombre, aspirante.Email);
+        _notificaciones.TutorRechazado(aspirante.Nombre, aspirante.Email, motivo);
 
         return NoContent();
     }
