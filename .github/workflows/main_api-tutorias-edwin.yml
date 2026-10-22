@@ -26,8 +26,11 @@ jobs:
       - name: Build with dotnet
         run: dotnet build --configuration Release
 
+      # Solo para Linux x64 (el sistema del App Service): sin las librerías
+      # nativas de Windows y macOS, el paquete pesa mucho menos y ZIP Deploy
+      # lo sube y descomprime más rápido.
       - name: dotnet publish
-        run: dotnet publish backend.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
+        run: dotnet publish backend.csproj -c Release -r linux-x64 --self-contained false -o ${{env.DOTNET_ROOT}}/myapp
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
