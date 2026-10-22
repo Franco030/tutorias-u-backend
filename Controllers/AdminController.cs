@@ -1,9 +1,11 @@
 using backend.Data;
+using backend.DTOs.Requests;
 using backend.DTOs.Responses;
 using backend.Enums;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace backend.Controllers;
@@ -119,42 +121,33 @@ public sealed class AdminController : ControllerBase
     [HttpPut("tutores/{id:int}/rechazar")]
     public async Task<IActionResult> RechazarTutor(
         int id,
-        [FromBody] RechazarTutorRequest request,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] RechazarTutorRequest? request,
         CancellationToken cancellationToken)
     {
-        var motivo = request.Motivo?.Trim();
-
+        var motivo = request?.Motivo?.Trim();
         if (motivo?.Length > 500)
         {
-            return BadRequest(new
-            {
-                mensaje = "El motivo no puede superar los 500 caracteres."
-            });
+            return Problem(statusCode: 400, title: "El motivo no puede superar los 500 caracteres.");
         }
 
         var aspirante = await _context.Usuarios
             .FirstOrDefaultAsync(
                 usuario =>
                     usuario.Id == id &&
-                    usuario.EstadoAprobacionId ==
-                        (int)EstadoAprobacion.Pendiente,
+                    usuario.EstadoAprobacionId == (int)EstadoAprobacion.Pendiente,
                 cancellationToken);
 
         if (aspirante is null)
         {
-            return Problem(
-                statusCode: 404,
-                title: "No se encontró una solicitud de tutor pendiente.");
+            return Problem(statusCode: 404, title: "No se encontró una solicitud de tutor pendiente.");
         }
 
+        // Solo cambia el estado: el rol y los datos del usuario se conservan.
         aspirante.EstadoAprobacionId = (int)EstadoAprobacion.Rechazado;
         await _context.SaveChangesAsync(cancellationToken);
 
-        _notificaciones.TutorRechazado(aspirante.Nombre,aspirante.Email, motivo);
+        _notificaciones.TutorRechazado(aspirante.Nombre, aspirante.Email, motivo);
+
         return NoContent();
     }
-
 }
-
-
-public sealed record RechazarTutorRequest(string? Motivo);

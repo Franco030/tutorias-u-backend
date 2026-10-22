@@ -1,3 +1,4 @@
+using backend.DTOs.Requests;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -211,5 +212,18 @@ public class NotificacionesCorreoTests
         Assert.Contains("Se me cruzó otra clase.", enviados[0].Html);
         Assert.Equal("ana@example.com", enviados[1].Para);
         Assert.Contains("No se indicó un motivo.", enviados[1].Html);
+    }
+
+    [Fact]
+    public void TutorRechazado_IncluyeElMotivoSoloSiExiste()
+    {
+        var (servicio, enviados) = CrearServicio();
+
+        servicio.TutorRechazado("Diego", "die@example.com", "El documento <b>no</b> es legible.");
+        servicio.TutorRechazado("Diego", "die@example.com", "  ");
+
+        Assert.Contains("Motivo del rechazo", enviados[0].Html);
+        Assert.Contains("El documento &lt;b&gt;no&lt;/b&gt; es legible.", enviados[0].Html);
+        Assert.DoesNotContain("Motivo del rechazo", enviados[1].Html);
     }
 }

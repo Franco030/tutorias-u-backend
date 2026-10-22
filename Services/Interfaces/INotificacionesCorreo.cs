@@ -25,6 +25,5 @@ namespace backend.Services.Interfaces
         void TutorAprobado(string nombre, string email);
 
         void TutorRechazado(string nombre, string email, string? motivo);
-
     }
 }

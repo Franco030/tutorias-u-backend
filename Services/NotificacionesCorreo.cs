@@ -123,7 +123,7 @@ namespace backend.Services
                 ["UrlBoton"] = Url("/")
             });
 
-        public void TutorRechazado(string nombre, string email,string? motivo) => Enviar(
+        public void TutorRechazado(string nombre, string email, string? motivo) => Enviar(
             email,
             "Resultado de tu postulación como tutor",
             "TutorRechazado",
