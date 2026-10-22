@@ -175,6 +175,7 @@ namespace backend.Controllers
                 FotoUrl = tutor.FotoUrl,
                 CalificacionPromedio = tutor.CalificacionPromedio,
                 TotalResenas = await _context.Resenas.CountAsync(resena => resena.TutorId == tutor.Id),
+                AntelacionMinimaHoras = tutor.AntelacionMinimaHoras,
                 Materias = tutor.MateriaNavigation.Select(m => m.Nombre).ToList()
             };
 
@@ -317,5 +318,166 @@ namespace backend.Controllers
 
             return Ok(disponibilidades);
         }
+
+        // Preferencias de reserva del tutor autenticado.
+        [HttpGet("preferencias")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+        public async Task<ActionResult<PreferenciasTutorDto>> ObtenerPreferencias(CancellationToken cancellationToken)
+        {
+            var tutor = await TutorAutenticadoAsync(cancellationToken);
+            if (tutor == null) return Problem(statusCode: 401, title: "Token inválido.");
+
+            return Ok(new PreferenciasTutorDto
+            {
+                AntelacionMinimaHoras = tutor.AntelacionMinimaHoras,
+                LinkReunion = tutor.LinkReunion
+            });
+        }
+
+        [HttpPut("preferencias")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+        public async Task<ActionResult<PreferenciasTutorDto>> GuardarPreferencias(
+            [FromBody] PreferenciasTutorDto request,
+            CancellationToken cancellationToken)
+        {
+            var tutor = await TutorAutenticadoAsync(cancellationToken);
+            if (tutor == null) return Problem(statusCode: 401, title: "Token inválido.");
+
+            if (request.AntelacionMinimaHoras is < 0 or > 168)
+            {
+                return Problem(statusCode: 400, title: "La antelación debe estar entre 0 y 168 horas.");
+            }
+
+            var link = request.LinkReunion?.Trim();
+            if (!string.IsNullOrEmpty(link) && !EsEnlaceWeb(link))
+            {
+                return Problem(statusCode: 400, title: "El enlace de reunión debe ser una dirección web (https://…).");
+            }
+
+            tutor.AntelacionMinimaHoras = request.AntelacionMinimaHoras;
+            tutor.LinkReunion = string.IsNullOrEmpty(link) ? null : link;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Ok(new PreferenciasTutorDto
+            {
+                AntelacionMinimaHoras = tutor.AntelacionMinimaHoras,
+                LinkReunion = tutor.LinkReunion
+            });
+        }
+
+        // Días bloqueados (desde hoy) del tutor autenticado, con su motivo.
+        [HttpGet("bloqueos")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+        public async Task<ActionResult<BloqueosResponseDto>> ObtenerMisBloqueos(
+            [FromServices] IHoraPlataforma hora,
+            CancellationToken cancellationToken)
+        {
+            var tutor = await TutorAutenticadoAsync(cancellationToken);
+            if (tutor == null) return Problem(statusCode: 401, title: "Token inválido.");
+
+            return Ok(await RespuestaBloqueosAsync(tutor.Id, DateOnly.FromDateTime(hora.Ahora), cancellationToken));
+        }
+
+        /*
+         * Reemplaza los días bloqueados desde hoy en adelante (los pasados no se
+         * tocan). No cancela citas: informa cuántas caen en días bloqueados.
+         */
+        [HttpPut("bloqueos")]
+        [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+        public async Task<ActionResult<BloqueosResponseDto>> GuardarBloqueos(
+            [FromBody] List<BloqueoDto> request,
+            [FromServices] IHoraPlataforma hora,
+            CancellationToken cancellationToken)
+        {
+            var tutor = await TutorAutenticadoAsync(cancellationToken);
+            if (tutor == null) return Problem(statusCode: 401, title: "Token inválido.");
+
+            var hoy = DateOnly.FromDateTime(hora.Ahora);
+            var limite = hoy.AddDays(MaximoDiasBloqueo);
+            if (request.Any(bloqueo => bloqueo.Fecha < hoy || bloqueo.Fecha > limite))
+            {
+                return Problem(statusCode: 400, title: $"Solo se pueden bloquear días entre hoy y los próximos {MaximoDiasBloqueo} días.");
+            }
+
+            if (request.Any(bloqueo => bloqueo.Motivo?.Trim().Length > 200))
+            {
+                return Problem(statusCode: 400, title: "El motivo no puede superar los 200 caracteres.");
+            }
+
+            var nuevos = request
+                .GroupBy(bloqueo => bloqueo.Fecha)
+                .Select(grupo => new Bloqueo
+                {
+                    TutorId = tutor.Id,
+                    Fecha = grupo.Key,
+                    Motivo = string.IsNullOrWhiteSpace(grupo.First().Motivo) ? null : grupo.First().Motivo!.Trim()
+                })
+                .ToList();
+
+            var actuales = await _context.Bloqueos
+                .Where(bloqueo => bloqueo.TutorId == tutor.Id && bloqueo.Fecha >= hoy)
+                .ToListAsync(cancellationToken);
+            _context.Bloqueos.RemoveRange(actuales);
+            _context.Bloqueos.AddRange(nuevos);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return Ok(await RespuestaBloqueosAsync(tutor.Id, hoy, cancellationToken));
+        }
+
+        // Días bloqueados de un tutor para el calendario de reservas (sin el motivo).
+        [HttpGet("{id}/bloqueos")]
+        [Authorize]
+        public async Task<ActionResult<IReadOnlyList<DateOnly>>> ObtenerBloqueosTutor(
+            int id,
+            [FromServices] IHoraPlataforma hora,
+            CancellationToken cancellationToken)
+        {
+            var hoy = DateOnly.FromDateTime(hora.Ahora);
+            var fechas = await _context.Bloqueos
+                .Where(bloqueo => bloqueo.TutorId == id && bloqueo.Fecha >= hoy)
+                .OrderBy(bloqueo => bloqueo.Fecha)
+                .Select(bloqueo => bloqueo.Fecha)
+                .ToListAsync(cancellationToken);
+
+            return Ok(fechas);
+        }
+
+        private const int MaximoDiasBloqueo = 366;
+
+        private async Task<Usuario?> TutorAutenticadoAsync(CancellationToken cancellationToken)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("id");
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int tutorId))
+            {
+                return null;
+            }
+
+            return await _context.Usuarios.FirstOrDefaultAsync(usuario => usuario.Id == tutorId, cancellationToken);
+        }
+
+        private async Task<BloqueosResponseDto> RespuestaBloqueosAsync(int tutorId, DateOnly hoy, CancellationToken cancellationToken)
+        {
+            var bloqueos = await _context.Bloqueos
+                .Where(bloqueo => bloqueo.TutorId == tutorId && bloqueo.Fecha >= hoy)
+                .OrderBy(bloqueo => bloqueo.Fecha)
+                .Select(bloqueo => new BloqueoDto { Fecha = bloqueo.Fecha, Motivo = bloqueo.Motivo })
+                .ToListAsync(cancellationToken);
+
+            var fechas = bloqueos.Select(bloqueo => bloqueo.Fecha.ToDateTime(TimeOnly.MinValue)).ToList();
+            var citasAfectadas = fechas.Count == 0
+                ? 0
+                : await _context.Citas.CountAsync(cita =>
+                    cita.TutorId == tutorId &&
+                    (cita.Estado == "Pendiente" || cita.Estado == "Aceptada") &&
+                    fechas.Contains(cita.FechaHoraInicio.Date),
+                    cancellationToken);
+
+            return new BloqueosResponseDto { Bloqueos = bloqueos, CitasAfectadas = citasAfectadas };
+        }
+
+        private static bool EsEnlaceWeb(string enlace) =>
+            enlace.Length <= 255 &&
+            Uri.TryCreate(enlace, UriKind.Absolute, out var uri) &&
+            (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
     }
 }

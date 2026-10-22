@@ -55,7 +55,8 @@ public class CitasController : ControllerBase
                     cita.Estudiante.Nombre,
                     cita.Estudiante.Email,
                     cita.Tutor.Nombre,
-                    cita.Tutor.Email))
+                    cita.Tutor.Email,
+                    cita.Tema))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (datos != null)
@@ -117,6 +118,7 @@ public class CitasController : ControllerBase
             {
                 usuario.Rol,
                 usuario.EstadoAprobacionId,
+                usuario.AntelacionMinimaHoras,
                 ImparteMateria = usuario.MateriaNavigation.Any(materia => materia.Id == request.MateriaId)
             })
             .FirstOrDefaultAsync(cancellationToken);
@@ -129,6 +131,22 @@ public class CitasController : ControllerBase
         if (!tutor.ImparteMateria)
         {
             return Problem(statusCode: 400, title: "El tutor no imparte esa materia.");
+        }
+
+        // Anticipación mínima que pide el tutor para preparar la sesión.
+        if (fechaHoraInicio < _hora.Ahora.AddHours(tutor.AntelacionMinimaHoras))
+        {
+            return Problem(
+                statusCode: 400,
+                title: $"Este tutor recibe reservas con al menos {tutor.AntelacionMinimaHoras} h de anticipación.");
+        }
+
+        var fecha = DateOnly.FromDateTime(fechaHoraInicio);
+        var diaBloqueado = await _context.Bloqueos
+            .AnyAsync(bloqueo => bloqueo.TutorId == request.TutorId && bloqueo.Fecha == fecha, cancellationToken);
+        if (diaBloqueado)
+        {
+            return Problem(statusCode: 400, title: "El tutor no da tutorías ese día.");
         }
 
         var diaSemana = (byte)fechaHoraInicio.DayOfWeek;
@@ -153,6 +171,7 @@ public class CitasController : ControllerBase
             TutorId = request.TutorId,
             MateriaId = request.MateriaId,
             FechaHoraInicio = fechaHoraInicio,
+            Tema = string.IsNullOrWhiteSpace(request.Tema) ? null : request.Tema.Trim(),
             Estado = "Pendiente"
         };
 
@@ -213,6 +232,15 @@ public class CitasController : ControllerBase
         if (!string.IsNullOrEmpty(linkReunion) && !EsEnlaceWeb(linkReunion))
         {
             return Problem(statusCode: 400, title: "El enlace de reunión debe ser una dirección web (https://…).");
+        }
+
+        // Sin enlace en la solicitud se usa el enlace fijo del tutor, si tiene.
+        if (string.IsNullOrEmpty(linkReunion))
+        {
+            linkReunion = await _context.Usuarios
+                .Where(usuario => usuario.Id == tutorId)
+                .Select(usuario => usuario.LinkReunion)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         cita.Estado = "Aceptada";
@@ -302,6 +330,7 @@ public class CitasController : ControllerBase
                 EstudianteNombre = cita.Estudiante.Nombre,
                 MateriaId = cita.MateriaId,
                 MateriaNombre = cita.Materia.Nombre,
+                Tema = cita.Tema,
                 FechaHoraInicio = cita.FechaHoraInicio,
                 Estado = cita.Estado
             })
@@ -345,6 +374,7 @@ public class CitasController : ControllerBase
                     FechaHoraInicio = c.FechaHoraInicio,
                     LinkReunion = c.LinkReunion,
                     Notas = c.Notas,
+                    Tema = c.Tema,
                     Estado = c.Estado
                 });
         }
@@ -364,6 +394,7 @@ public class CitasController : ControllerBase
                     FechaHoraInicio = c.FechaHoraInicio,
                     LinkReunion = c.LinkReunion,
                     Notas = c.Notas,
+                    Tema = c.Tema,
                     Estado = c.Estado
                 });
         }
@@ -501,6 +532,7 @@ public class CitasController : ControllerBase
                 FechaHoraInicio = cita.FechaHoraInicio,
                 LinkReunion = cita.LinkReunion,
                 Notas = cita.Notas,
+                Tema = cita.Tema,
                 Estado = cita.Estado,
                 Puntuacion = cita.Resena == null ? null : cita.Resena.Puntuacion
             })

@@ -21,6 +21,8 @@ public partial class Cita
 
     public string? Notas { get; set; }
 
+    public string? Tema { get; set; }
+
     public virtual Usuario Estudiante { get; set; } = null!;
 
     public virtual Materia Materia { get; set; } = null!;

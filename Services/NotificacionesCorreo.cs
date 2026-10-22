@@ -37,6 +37,7 @@ namespace backend.Services
                 ["EstudianteNombre"] = cita.EstudianteNombre,
                 ["Materia"] = cita.Materia,
                 ["Fecha"] = FormatearFecha(cita.FechaHoraInicio),
+                ["Tema"] = Limpiar(cita.Tema),
                 ["UrlBoton"] = Url("/tutor/mis-tutorias")
             });
 

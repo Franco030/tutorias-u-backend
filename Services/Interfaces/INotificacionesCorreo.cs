@@ -6,7 +6,8 @@ namespace backend.Services.Interfaces
         string EstudianteNombre,
         string EstudianteEmail,
         string TutorNombre,
-        string TutorEmail);
+        string TutorEmail,
+        string? Tema = null);
 
     /*
      * Avisos por correo de cambios en citas y postulaciones. Los métodos no
