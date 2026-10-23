@@ -81,6 +81,14 @@ dotnet test backend.Tests/backend.Tests.csproj -c Release
 
 Las pruebas no necesitan SQL Server ni servicios de Azure: usan una base de datos en memoria y dobles de prueba. Se ejecutan en Release para no chocar con un servidor local en ejecución, que bloquea los binarios de Debug.
 
+Para medir la cobertura (formato Cobertura, en `TestResults/`):
+
+```bash
+dotnet test backend.Tests/backend.Tests.csproj -c Release --settings backend.Tests/coverage.runsettings --collect:"XPlat Code Coverage" --results-directory TestResults
+```
+
+`coverage.runsettings` deja fuera el código que genera el compilador (`obj/`), que no es de la API.
+
 ## Base de datos
 
 El modelo es database-first: el esquema se modifica en SQL Server y las clases de `Models/` y `Data/AppDbContext.cs` se regeneran con scaffold.

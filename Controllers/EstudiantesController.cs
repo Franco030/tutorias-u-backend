@@ -86,6 +86,38 @@ public class EstudiantesController : ControllerBase
 
     }
 
+    // "Omitir por ahora": termina el onboarding sin materias. Sin esto el
+    // servidor seguía diciendo que faltaba y al volver a entrar reaparecía.
+    [HttpPost("intereses/omitir")]
+    public async Task<IActionResult> OmitirIntereses(CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (userIdClaim == null || !int.TryParse(userIdClaim, out int estudianteId))
+        {
+            return Problem(statusCode: 401, title: "Token inválido.");
+        }
+
+        var estudiante = await _context.Usuarios.FirstOrDefaultAsync(
+            usuario => usuario.Id == estudianteId,
+            cancellationToken);
+
+        if (estudiante == null)
+        {
+            return Problem(statusCode: 404, title: "Usuario no encontrado.");
+        }
+
+        if (estudiante.Rol != "Estudiante")
+        {
+            return Problem(statusCode: 400, title: "El usuario autenticado no tiene rol de Estudiante.");
+        }
+
+        estudiante.OnboardingCompleto = true;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpGet("intereses")]
     public async Task<IActionResult> ObtenerIntereses(CancellationToken cancellationToken)
     {

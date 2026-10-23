@@ -502,16 +502,17 @@ public class CitasController : ControllerBase
         }
 
         var ahora = _hora.Ahora;
-        // Una sesión se completa cuando termina su hora, no cuando empieza: así
-        // no se califica mientras ocurre y sigue en "próximas" como en curso.
+        // Al terminar su hora la sesión espera a que el tutor confirme si se
+        // impartió; si no lo hace en el plazo, se completa sola.
         var inicioEnCurso = ReglasCita.InicioDeSesionesEnCurso(ahora);
+        var limiteConfirmacion = ReglasCita.InicioDeSesionesSinConfirmarVencidas(ahora);
         var citasQuery = _context.Citas
             .Where(cita =>
                 (userRole == "Estudiante" && cita.EstudianteId == userId) ||
                 (userRole == "Tutor" && cita.TutorId == userId));
 
         var citasCompletadas = await citasQuery
-            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio <= inicioEnCurso)
+            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio <= limiteConfirmacion)
             .ToListAsync(cancellationToken);
 
         foreach (var cita in citasCompletadas)
@@ -552,9 +553,24 @@ public class CitasController : ControllerBase
             : Forbid();
     }
 
+    // El tutor confirma que la sesión se impartió: el estudiante ya la puede calificar.
     [HttpPut("{id}/completar")]
     [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
-    public async Task<IActionResult> CompletarCita(int id, CancellationToken cancellationToken = default)
+    public Task<IActionResult> CompletarCita(int id, CancellationToken cancellationToken = default) =>
+        CerrarSesionAsync(id, "Completada", _notificaciones.SesionImpartida, cancellationToken);
+
+    // El tutor registra que el estudiante no se conectó: no se puede calificar.
+    [HttpPut("{id}/no-asistio")]
+    [Authorize(Policy = PoliticasAutorizacion.TutorAprobado)]
+    public Task<IActionResult> RegistrarInasistencia(int id, CancellationToken cancellationToken = default) =>
+        CerrarSesionAsync(id, "NoAsistio", _notificaciones.InasistenciaRegistrada, cancellationToken);
+
+    // Cierre de una sesión aceptada por su tutor, una vez que empezó.
+    private async Task<IActionResult> CerrarSesionAsync(
+        int id,
+        string estado,
+        Action<DatosCitaCorreo> notificar,
+        CancellationToken cancellationToken)
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                        ?? User.FindFirst("sub")?.Value
@@ -577,12 +593,20 @@ public class CitasController : ControllerBase
 
         if (cita.Estado != "Aceptada")
         {
-            return Problem(statusCode: 400, title: "Solo se pueden completar citas aceptadas");
+            return Problem(statusCode: 409, title: "Esta sesión ya no se puede confirmar.");
         }
 
-        cita.Estado = "Completada";
+        if (cita.FechaHoraInicio > _hora.Ahora)
+        {
+            return Problem(statusCode: 409, title: "La sesión todavía no empieza.");
+        }
+
+        cita.Estado = estado;
         await _context.SaveChangesAsync(cancellationToken);
-        return Ok(new { Mensaje = "Cita completada" });
+
+        await NotificarAsync(cita.Id, notificar, cancellationToken);
+
+        return Ok(new { Mensaje = estado == "Completada" ? "Sesión impartida" : "Inasistencia registrada" });
     }
 
     private static bool EsEnlaceWeb(string enlace) =>

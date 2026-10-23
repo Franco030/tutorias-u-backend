@@ -37,7 +37,7 @@ namespace backend.Tests
             _mockEmailService = new Mock<IEmailService>();
 
             // 4. Instanciar tu servicio real pasándole los simuladores
-            _authService = new AuthService(_dbContext, _mockConfig.Object, _mockEmailService.Object);
+            _authService = new AuthService(_dbContext, _mockConfig.Object, _mockEmailService.Object, Mock.Of<IVerificadorCuentasExternas>());
         }
 
         [Fact]

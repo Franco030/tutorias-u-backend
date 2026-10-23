@@ -53,7 +53,7 @@ public class HallazgosRevisionTests
         var context = GetDbContext();
         context.Usuarios.Add(Usuario(1, "Nuevo"));
         context.SaveChanges();
-        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>());
+        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>(), Mock.Of<IVerificadorCuentasExternas>());
 
         await Assert.ThrowsAsync<ArgumentException>(() => auth.AsignarRolAsync(1, "Administrador"));
         Assert.Equal("Nuevo", (await context.Usuarios.FindAsync(1))!.Rol);
@@ -65,7 +65,7 @@ public class HallazgosRevisionTests
         var context = GetDbContext();
         context.Usuarios.Add(Usuario(1, "Nuevo"));
         context.SaveChanges();
-        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>());
+        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>(), Mock.Of<IVerificadorCuentasExternas>());
 
         var sesion = await auth.AsignarRolAsync(1, "Estudiante");
 
@@ -231,7 +231,7 @@ public class HallazgosRevisionTests
         var email = new Mock<IEmailService>();
         email.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .ThrowsAsync(new InvalidOperationException("El servicio de correo no está configurado."));
-        var auth = new AuthService(context, Config(), email.Object);
+        var auth = new AuthService(context, Config(), email.Object, Mock.Of<IVerificadorCuentasExternas>());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => auth.RegisterAsync(new RegisterDto
         {

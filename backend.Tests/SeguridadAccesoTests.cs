@@ -101,7 +101,7 @@ public class SeguridadAccesoTests
         email.Setup(e => e.SendEmailAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Callback<string, string, string>((_, _, contenido) => html = contenido)
             .Returns(Task.CompletedTask);
-        var auth = new AuthService(context, Config(), email.Object);
+        var auth = new AuthService(context, Config(), email.Object, Mock.Of<IVerificadorCuentasExternas>());
 
         await auth.RegisterAsync(new RegisterDto { Email = "ana@example.com", Nombre = "Ana", Password = "PasswordSeguro123" });
 

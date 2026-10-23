@@ -153,10 +153,14 @@ public class HoraPlataformaTests
         Assert.Equal([32], enCurso.historial);
         Assert.Equal("Aceptada", (await context.Citas.FindAsync(31))!.Estado);
 
-        // 17:00: terminó su hora; pasa al historial como completada.
+        // 17:00: terminó su hora; pasa al historial esperando que el tutor confirme.
         var terminada = await Consultar(new DateTime(2026, 10, 22, 17, 0, 0));
         Assert.Empty(terminada.proximas);
         Assert.Equal([31, 32], terminada.historial);
+        Assert.Equal("Aceptada", (await context.Citas.FindAsync(31))!.Estado);
+
+        // Tres días después sin confirmar: se completa sola.
+        await Consultar(new DateTime(2026, 10, 25, 17, 0, 0));
         Assert.Equal("Completada", (await context.Citas.FindAsync(31))!.Estado);
     }
 }

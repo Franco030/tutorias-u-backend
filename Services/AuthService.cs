@@ -1,8 +1,6 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
-using System.Text.Json;
-using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using backend.Data;
@@ -21,62 +19,27 @@ namespace backend.Services
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly IEmailService _emailService;
+        private readonly IVerificadorCuentasExternas _verificador;
 
-        public AuthService(AppDbContext context, IConfiguration configuration, IEmailService emailService)
+        public AuthService(AppDbContext context, IConfiguration configuration, IEmailService emailService, IVerificadorCuentasExternas verificador)
         {
             _context = context;
             _configuration = configuration;
             _emailService = emailService;
+            _verificador = verificador;
         }
 
         public async Task<AuthResponseDto> LoginWithGoogleAsync(ExternalLoginDto dto)
         {
-            string email;
-            string nombre;
-            string? fotoUrl;
-            string subject;
-
-            if (dto.IdToken.StartsWith("ya29."))
-            {
-                using var client = new HttpClient();
-                var response = await client.GetAsync($"https://www.googleapis.com/oauth2/v3/userinfo?access_token={dto.IdToken}");
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new UnauthorizedAccessException("La Sesion de Google no es valida o ha expirado");
-                }
-
-                var json = await response.Content.ReadAsStringAsync();
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                email = root.GetProperty("email").GetString() ?? throw new Exception("Google no devolvio el email");
-                nombre = root.GetProperty("name").GetString() ?? email;
-                fotoUrl = root.TryGetProperty("picture", out var pic) ? pic.GetString() : null;
-                subject = root.GetProperty("sub").GetString() ?? "";
-            }
-            else
-            {
-                try
-                {
-                    var payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken);
-                    email = payload.Email;
-                    nombre = payload.Name ?? payload.Email;
-                    fotoUrl = payload.Picture;
-                    subject = payload.Subject;
-                }
-                catch (Exception)
-                {
-                    throw new UnauthorizedAccessException("La Sesion de Google no es valida o ha expirado");
-                }
-            }
+            var cuenta = await _verificador.VerificarGoogleAsync(dto.IdToken);
+            var fotoUrl = cuenta.FotoUrl;
 
             var usuario = await FindOrCreateUserAsync(
-                email: email,
-                nombre: nombre,
+                email: cuenta.Email,
+                nombre: cuenta.Nombre,
                 fotoUrl: fotoUrl,
                 authProvider: "Google",
-                providerId: subject
+                providerId: cuenta.ProveedorId
             );
 
             var token = GenerateJwtToken(usuario);
@@ -96,29 +59,14 @@ namespace backend.Services
 
         public async Task<AuthResponseDto> LoginWithMicrosoftAsync(ExternalLoginDto dto)
         {
-            var handler = new JwtSecurityTokenHandler();
-            if (!handler.CanReadToken(dto.IdToken))
-            {
-                throw new UnauthorizedAccessException("El token de Microsoft no tiene un formato válido.");
-            }
-
-            var jwt = handler.ReadJwtToken(dto.IdToken);
-
-            var email = jwt.Claims.FirstOrDefault(c => c.Type == "preferred_username" || c.Type == "email" || c.Type == ClaimTypes.Email)?.Value;
-            var nombre = jwt.Claims.FirstOrDefault(c => c.Type == "name" || c.Type == ClaimTypes.Name)?.Value;
-            var providerId = jwt.Claims.FirstOrDefault(c => c.Type == "oid" || c.Type == "sub")?.Value;
-
-            if (string.IsNullOrEmpty(email))
-            {
-                throw new UnauthorizedAccessException("No se pudo obtener el correo de la cuenta de Microsoft.");
-            }
+            var cuenta = await _verificador.VerificarMicrosoftAsync(dto.IdToken);
 
             var usuario = await FindOrCreateUserAsync(
-                email: email,
-                nombre: nombre ?? email,
+                email: cuenta.Email,
+                nombre: cuenta.Nombre,
                 fotoUrl: null,
                 authProvider: "Microsoft",
-                providerId: providerId
+                providerId: cuenta.ProveedorId
             );
 
             var token = GenerateJwtToken(usuario);

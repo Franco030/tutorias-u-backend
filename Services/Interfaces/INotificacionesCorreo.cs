@@ -28,6 +28,12 @@ namespace backend.Services.Interfaces
         // día anterior o, con faltaUnaHora, el de una hora antes.
         void RecordatorioCita(DatosCitaCorreo cita, string? linkReunion, bool faltaUnaHora);
 
+        // Al estudiante, cuando el tutor confirma la sesión: ya la puede calificar.
+        void SesionImpartida(DatosCitaCorreo cita);
+
+        // Al estudiante, cuando el tutor registra que no se conectó.
+        void InasistenciaRegistrada(DatosCitaCorreo cita);
+
         void TutorAprobado(string nombre, string email);
 
         void TutorRechazado(string nombre, string email, string? motivo);
