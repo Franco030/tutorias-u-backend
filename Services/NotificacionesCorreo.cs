@@ -11,9 +11,6 @@ namespace backend.Services
             ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
              "septiembre", "octubre", "noviembre", "diciembre"];
 
-        // Las sesiones son de una hora (la disponibilidad se divide en bloques de 1 h).
-        public static readonly TimeSpan DuracionSesion = TimeSpan.FromHours(1);
-
         private readonly IColaCorreos _cola;
         private readonly ILogger<NotificacionesCorreo> _logger;
         private readonly IHoraPlataforma _hora;
@@ -216,7 +213,7 @@ namespace backend.Services
                     ? $"Sesión de {cita.Materia} en TutoriasU. El enlace de la videollamada aparecerá en «Mis tutorías»: {Url("/mis-tutorias")}"
                     : $"Sesión de {cita.Materia} en TutoriasU. Videollamada: {link}",
                 _hora.AUtc(cita.FechaHoraInicio),
-                DuracionSesion,
+                ReglasCita.DuracionSesion,
                 link,
                 DateTime.UtcNow);
         }

@@ -10,6 +10,7 @@ using backend.Enums;
 using backend.Models;
 using backend.DTOs.Citas;
 using backend.DTOs.Responses;
+using backend.Services;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
@@ -356,6 +357,9 @@ public class CitasController : ControllerBase
         }
 
         var ahora = _hora.Ahora;
+        // Una cita aceptada sigue aquí mientras dura la sesión (el inicio la
+        // muestra "En curso"); una pendiente, solo hasta su hora de inicio.
+        var inicioEnCurso = ReglasCita.InicioDeSesionesEnCurso(ahora);
 
         IQueryable<ProximaCitaResponseDto> query;
 
@@ -364,8 +368,8 @@ public class CitasController : ControllerBase
             query = _context.Citas
                 .AsNoTracking()
                 .Where(c => c.EstudianteId == userId &&
-                            (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahora)
+                            ((c.Estado == "Aceptada" && c.FechaHoraInicio > inicioEnCurso) ||
+                             (c.Estado == "Pendiente" && c.FechaHoraInicio >= ahora)))
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -384,8 +388,8 @@ public class CitasController : ControllerBase
             query = _context.Citas
                 .AsNoTracking()
                 .Where(c => c.TutorId == userId &&
-                            (c.Estado == "Aceptada" || c.Estado == "Pendiente") &&
-                            c.FechaHoraInicio >= ahora)
+                            ((c.Estado == "Aceptada" && c.FechaHoraInicio > inicioEnCurso) ||
+                             (c.Estado == "Pendiente" && c.FechaHoraInicio >= ahora)))
                 .OrderBy(c => c.FechaHoraInicio)
                 .Select(c => new ProximaCitaResponseDto
                 {
@@ -498,13 +502,16 @@ public class CitasController : ControllerBase
         }
 
         var ahora = _hora.Ahora;
+        // Una sesión se completa cuando termina su hora, no cuando empieza: así
+        // no se califica mientras ocurre y sigue en "próximas" como en curso.
+        var inicioEnCurso = ReglasCita.InicioDeSesionesEnCurso(ahora);
         var citasQuery = _context.Citas
             .Where(cita =>
                 (userRole == "Estudiante" && cita.EstudianteId == userId) ||
                 (userRole == "Tutor" && cita.TutorId == userId));
 
         var citasCompletadas = await citasQuery
-            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio < ahora)
+            .Where(cita => cita.Estado == "Aceptada" && cita.FechaHoraInicio <= inicioEnCurso)
             .ToListAsync(cancellationToken);
 
         foreach (var cita in citasCompletadas)
@@ -520,7 +527,8 @@ public class CitasController : ControllerBase
         var historial = await citasQuery
             .AsNoTracking()
             .Where(cita =>
-                cita.FechaHoraInicio < ahora ||
+                cita.FechaHoraInicio <= inicioEnCurso ||
+                (cita.Estado != "Aceptada" && cita.FechaHoraInicio < ahora) ||
                 cita.Estado == "Completada" ||
                 cita.Estado == "Cancelada" ||
                 cita.Estado == "Rechazada")

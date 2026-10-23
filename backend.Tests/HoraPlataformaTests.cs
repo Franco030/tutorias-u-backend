@@ -122,4 +122,41 @@ public class HoraPlataformaTests
         Assert.Single(Assert.IsAssignableFrom<IEnumerable<ProximaCitaResponseDto>>(proximas.Value));
         Assert.Equal("Aceptada", (await context.Citas.FindAsync(30))!.Estado);
     }
+
+    [Fact]
+    public async Task SesionEnCurso_SigueEnProximasYSeCompletaAlTerminarSuHora()
+    {
+        var context = GetDbContext();
+        context.Usuarios.AddRange(
+            new Usuario { Id = 1, Email = "ana@example.com", Nombre = "Ana", Rol = "Estudiante", AuthProvider = "Local" },
+            new Usuario { Id = 7, Email = "mateo@example.com", Nombre = "Mateo", Rol = "Tutor", AuthProvider = "Local" });
+        context.Materias.Add(new Materia { Id = 1, Nombre = "Cálculo" });
+        context.Citas.AddRange(
+            new Cita { Id = 31, EstudianteId = 1, TutorId = 7, MateriaId = 1, Estado = "Aceptada", FechaHoraInicio = new DateTime(2026, 10, 22, 16, 0, 0) },
+            // Una solicitud que nadie aceptó no se queda en próximas al pasar su hora.
+            new Cita { Id = 32, EstudianteId = 1, TutorId = 7, MateriaId = 1, Estado = "Pendiente", FechaHoraInicio = new DateTime(2026, 10, 22, 15, 0, 0) });
+        await context.SaveChangesAsync();
+
+        async Task<(List<int> proximas, List<int> historial)> Consultar(DateTime ahora)
+        {
+            var controller = CrearController(context, ahora, 1, "Estudiante");
+            var historial = Assert.IsType<OkObjectResult>(await controller.ObtenerHistorial());
+            var proximas = Assert.IsType<OkObjectResult>(await controller.ObtenerProximasCitas());
+            return (
+                Assert.IsAssignableFrom<IEnumerable<ProximaCitaResponseDto>>(proximas.Value).Select(c => c.Id).ToList(),
+                Assert.IsAssignableFrom<IEnumerable<ProximaCitaResponseDto>>(historial.Value).Select(c => c.Id).ToList());
+        }
+
+        // 16:20: la sesión de las 16:00 está en curso.
+        var enCurso = await Consultar(new DateTime(2026, 10, 22, 16, 20, 0));
+        Assert.Equal([31], enCurso.proximas);
+        Assert.Equal([32], enCurso.historial);
+        Assert.Equal("Aceptada", (await context.Citas.FindAsync(31))!.Estado);
+
+        // 17:00: terminó su hora; pasa al historial como completada.
+        var terminada = await Consultar(new DateTime(2026, 10, 22, 17, 0, 0));
+        Assert.Empty(terminada.proximas);
+        Assert.Equal([31, 32], terminada.historial);
+        Assert.Equal("Completada", (await context.Citas.FindAsync(31))!.Estado);
+    }
 }
