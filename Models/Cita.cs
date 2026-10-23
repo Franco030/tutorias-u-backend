@@ -23,6 +23,10 @@ public partial class Cita
 
     public string? Tema { get; set; }
 
+    public DateTime? RecordatorioDiaEnviado { get; set; }
+
+    public DateTime? RecordatorioHoraEnviado { get; set; }
+
     public virtual Usuario Estudiante { get; set; } = null!;
 
     public virtual Materia Materia { get; set; } = null!;

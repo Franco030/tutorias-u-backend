@@ -22,6 +22,9 @@ builder.Services.AddSingleton<ColaCorreos>();
 builder.Services.AddSingleton<IColaCorreos>(sp => sp.GetRequiredService<ColaCorreos>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ColaCorreos>());
 builder.Services.AddScoped<INotificacionesCorreo, NotificacionesCorreo>();
+// Recordatorios de citas (un día y una hora antes), revisados en segundo plano.
+builder.Services.AddScoped<RecordatoriosCitas>();
+builder.Services.AddHostedService<ServicioRecordatorios>();
 // Hora local de la universidad (configurable con "ZonaHoraria").
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IHoraPlataforma, HoraPlataforma>();

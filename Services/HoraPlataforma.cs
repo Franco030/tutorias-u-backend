@@ -20,5 +20,8 @@ namespace backend.Services
         public DateTime Ahora => DateTime.SpecifyKind(
             TimeZoneInfo.ConvertTimeFromUtc(_tiempo.GetUtcNow().UtcDateTime, _zona),
             DateTimeKind.Unspecified);
+
+        public DateTime AUtc(DateTime horaLocal) =>
+            TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(horaLocal, DateTimeKind.Unspecified), _zona);
     }
 }

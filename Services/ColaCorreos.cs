@@ -38,7 +38,7 @@ namespace backend.Services
                 {
                     using var scope = _scopeFactory.CreateScope();
                     var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                    await emailService.SendEmailAsync(correo.Para, correo.Asunto, correo.Html);
+                    await emailService.SendEmailAsync(correo.Para, correo.Asunto, correo.Html, correo.Adjuntos ?? []);
                 }
                 catch (Exception ex)
                 {

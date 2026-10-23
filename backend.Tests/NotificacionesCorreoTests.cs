@@ -56,7 +56,9 @@ public class NotificacionesCorreoTests
             new Claim(ClaimTypes.Role, rol)
         }, "mock"));
 
-        return new CitasController(context, notificaciones, NullLogger<CitasController>.Instance, HoraFija.Actual())
+        // Reloj fijo un día antes de la cita: con el reloj real, la cita de prueba
+        // quedaba en el pasado al llegar su fecha y aceptarla respondía 409.
+        return new CitasController(context, notificaciones, NullLogger<CitasController>.Instance, new HoraFija(Inicio.AddDays(-1)))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext { User = user } }
         };
@@ -161,7 +163,7 @@ public class NotificacionesCorreoTests
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["FrontendUrl"] = "https://tutorias.example.com/" })
             .Build();
-        return (new NotificacionesCorreo(cola.Object, configuration, NullLogger<NotificacionesCorreo>.Instance), enviados);
+        return (new NotificacionesCorreo(cola.Object, configuration, NullLogger<NotificacionesCorreo>.Instance, new HoraFija(Inicio.AddDays(-1))), enviados);
     }
 
     private static readonly DatosCitaCorreo Datos = new(

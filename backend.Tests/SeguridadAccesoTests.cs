@@ -36,6 +36,7 @@ public sealed class ApiDePrueba : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Audience", "TutoriasUFrontend");
         builder.UseSetting("FrontendUrl", "http://localhost:5173");
         builder.UseSetting("LimiteAcceso:PorMinuto", "3");
+        builder.UseSetting("Recordatorios:Activos", "false");
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();

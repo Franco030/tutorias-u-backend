@@ -8,5 +8,8 @@ namespace backend.Services.Interfaces
     public interface IHoraPlataforma
     {
         DateTime Ahora { get; }
+
+        // Para lo que sale de la plataforma con zona explícita (archivos .ics).
+        DateTime AUtc(DateTime horaLocal);
     }
 }
