@@ -16,6 +16,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+// Restablecer la contraseña y reenviar la verificación (correos por la cola).
+builder.Services.AddScoped<RecuperacionCuenta>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 // Correos de citas y postulaciones: se encolan y se envían en segundo plano.
 builder.Services.AddSingleton<ColaCorreos>();

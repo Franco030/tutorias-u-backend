@@ -22,4 +22,20 @@ namespace backend.DTOs.Requests
         [Required]
         public string Password { get; set; } = string.Empty;
     }
+
+    // "¿Olvidaste tu contraseña?" y "Reenviar el correo de verificación".
+    public class CorreoCuentaDto
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public class RestablecerContrasenaDto
+    {
+        [Required]
+        public string Token { get; set; } = string.Empty;
+
+        [Required, MinLength(6, ErrorMessage = "La clave debe tener al menos 6 caracteres.")]
+        public string Password { get; set; } = string.Empty;
+    }
 }
