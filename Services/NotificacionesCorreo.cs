@@ -11,17 +11,23 @@ namespace backend.Services
             ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto",
              "septiembre", "octubre", "noviembre", "diciembre"];
 
+        // Las sesiones son de una hora (la disponibilidad se divide en bloques de 1 h).
+        public static readonly TimeSpan DuracionSesion = TimeSpan.FromHours(1);
+
         private readonly IColaCorreos _cola;
         private readonly ILogger<NotificacionesCorreo> _logger;
+        private readonly IHoraPlataforma _hora;
         private readonly string _frontendUrl;
 
         public NotificacionesCorreo(
             IColaCorreos cola,
             IConfiguration configuration,
-            ILogger<NotificacionesCorreo> logger)
+            ILogger<NotificacionesCorreo> logger,
+            IHoraPlataforma hora)
         {
             _cola = cola;
             _logger = logger;
+            _hora = hora;
             _frontendUrl = (configuration["FrontendUrl"] ?? string.Empty).TrimEnd('/');
         }
 
@@ -60,7 +66,52 @@ namespace backend.Services
                     ["LinkReunion"] = link,
                     ["SinLink"] = link == null ? "1" : null,
                     ["UrlBoton"] = Url("/mis-tutorias")
-                });
+                },
+                Calendario(cita, $"Tutoría de {cita.Materia} con {cita.TutorNombre}", link));
+        }
+
+        public void RecordatorioCita(DatosCitaCorreo cita, string? linkReunion, bool faltaUnaHora)
+        {
+            var link = EsEnlaceSeguro(linkReunion) ? linkReunion!.Trim() : null;
+            var cuando = faltaUnaHora ? "en una hora" : CuandoEs(cita.FechaHoraInicio);
+            var hora = $"{cita.FechaHoraInicio:HH:mm} h";
+
+            // Cada quien ve a la otra persona; el tema le sirve sobre todo al tutor.
+            var destinatarios = new[]
+            {
+                (Email: cita.EstudianteEmail, Nombre: cita.EstudianteNombre, Rol: "Tutor",
+                    Contraparte: cita.TutorNombre, Ruta: "/mis-tutorias"),
+                (Email: cita.TutorEmail, Nombre: cita.TutorNombre, Rol: "Estudiante",
+                    Contraparte: cita.EstudianteNombre, Ruta: "/mis-tutorias"),
+            };
+
+            foreach (var destinatario in destinatarios)
+            {
+                Enviar(
+                    destinatario.Email,
+                    faltaUnaHora
+                        ? $"Tu tutoría de {cita.Materia} empieza en una hora"
+                        : $"Recordatorio: tutoría de {cita.Materia} {cuando} a las {hora}",
+                    "Recordatorio",
+                    new()
+                    {
+                        ["Titulo"] = "Recordatorio de tutoría",
+                        ["Preencabezado"] = $"Tu sesión de {cita.Materia} con {destinatario.Contraparte} es {cuando}, a las {hora}.",
+                        ["Encabezado"] = faltaUnaHora
+                            ? "Tu tutoría empieza en una hora"
+                            : $"Tu tutoría es {cuando} a las {hora}",
+                        ["Nombre"] = destinatario.Nombre,
+                        ["RolContraparte"] = destinatario.Rol,
+                        ["ContraparteNombre"] = destinatario.Contraparte,
+                        ["Materia"] = cita.Materia,
+                        ["Fecha"] = FormatearFecha(cita.FechaHoraInicio),
+                        ["Tema"] = Limpiar(cita.Tema),
+                        ["LinkReunion"] = link,
+                        ["SinLink"] = link == null ? "1" : null,
+                        ["UrlBoton"] = Url(destinatario.Ruta)
+                    },
+                    Calendario(cita, $"Tutoría de {cita.Materia} con {destinatario.Contraparte}", link));
+            }
         }
 
         public void CitaRechazada(DatosCitaCorreo cita, string? motivo) => Enviar(
@@ -142,7 +193,40 @@ namespace backend.Services
         public static string FormatearFecha(DateTime fecha) =>
             $"{Dias[(int)fecha.DayOfWeek]} {fecha.Day} de {Meses[fecha.Month - 1]} de {fecha.Year}, {fecha:HH:mm} h";
 
-        private void Enviar(string para, string asunto, string plantilla, Dictionary<string, string?> valores)
+        // "hoy", "mañana" o el día de la semana, según la hora de la plataforma.
+        private string CuandoEs(DateTime inicio) => (inicio.Date - _hora.Ahora.Date).Days switch
+        {
+            0 => "hoy",
+            1 => "mañana",
+            _ => $"el {Dias[(int)inicio.DayOfWeek]}"
+        };
+
+        // Archivo de calendario de la cita; sin id (datos incompletos) no se adjunta.
+        private Func<AdjuntoCorreo>? Calendario(DatosCitaCorreo cita, string titulo, string? link)
+        {
+            if (cita.CitaId <= 0)
+            {
+                return null;
+            }
+
+            return () => CalendarioIcs.Evento(
+                cita.CitaId,
+                titulo,
+                link == null
+                    ? $"Sesión de {cita.Materia} en TutoriasU. El enlace de la videollamada aparecerá en «Mis tutorías»: {Url("/mis-tutorias")}"
+                    : $"Sesión de {cita.Materia} en TutoriasU. Videollamada: {link}",
+                _hora.AUtc(cita.FechaHoraInicio),
+                DuracionSesion,
+                link,
+                DateTime.UtcNow);
+        }
+
+        private void Enviar(
+            string para,
+            string asunto,
+            string plantilla,
+            Dictionary<string, string?> valores,
+            Func<AdjuntoCorreo>? adjunto = null)
         {
             try
             {
@@ -152,7 +236,11 @@ namespace backend.Services
                     return;
                 }
 
-                _cola.Encolar(new CorreoPendiente(para, asunto, PlantillasCorreo.Renderizar(plantilla, valores)));
+                _cola.Encolar(new CorreoPendiente(
+                    para,
+                    asunto,
+                    PlantillasCorreo.Renderizar(plantilla, valores),
+                    adjunto == null ? null : [adjunto()]));
             }
             catch (Exception ex)
             {

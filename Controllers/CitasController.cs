@@ -56,7 +56,8 @@ public class CitasController : ControllerBase
                     cita.Estudiante.Email,
                     cita.Tutor.Nombre,
                     cita.Tutor.Email,
-                    cita.Tema))
+                    cita.Tema,
+                    cita.Id))
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (datos != null)

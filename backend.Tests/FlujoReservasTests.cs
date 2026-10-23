@@ -187,7 +187,7 @@ public class FlujoReservasTests
         var enviados = new List<CorreoPendiente>();
         var cola = new Mock<IColaCorreos>();
         cola.Setup(c => c.Encolar(It.IsAny<CorreoPendiente>())).Callback<CorreoPendiente>(enviados.Add);
-        var servicio = new NotificacionesCorreo(cola.Object, new ConfigurationBuilder().Build(), NullLogger<NotificacionesCorreo>.Instance);
+        var servicio = new NotificacionesCorreo(cola.Object, new ConfigurationBuilder().Build(), NullLogger<NotificacionesCorreo>.Instance, new HoraFija(Ahora));
         DatosCitaCorreo Datos(string? tema) => new("Cálculo", Ahora, "Ana", "a@example.com", "Mateo", "m@example.com", tema);
 
         servicio.CitaSolicitada(Datos("Repasar <límites>"));

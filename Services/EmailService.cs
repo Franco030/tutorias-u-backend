@@ -26,7 +26,14 @@ namespace backend.Services
             _emailClient = new EmailClient(connectionString);
         }
 
-        public async Task SendEmailAsync(string toEmail, string subject, string htmlContent)
+        public Task SendEmailAsync(string toEmail, string subject, string htmlContent) =>
+            SendEmailAsync(toEmail, subject, htmlContent, []);
+
+        public async Task SendEmailAsync(
+            string toEmail,
+            string subject,
+            string htmlContent,
+            IReadOnlyList<AdjuntoCorreo> adjuntos)
         {
             if (_emailClient == null || _senderAddress == null)
             {
@@ -43,6 +50,14 @@ namespace backend.Services
                         Html = htmlContent
                     }
                 );
+
+                foreach (var adjunto in adjuntos)
+                {
+                    emailMessage.Attachments.Add(new EmailAttachment(
+                        adjunto.Nombre,
+                        adjunto.TipoContenido,
+                        BinaryData.FromBytes(adjunto.Contenido)));
+                }
 
                 await _emailClient.SendAsync(WaitUntil.Completed, emailMessage);
             }

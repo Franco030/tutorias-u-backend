@@ -1,6 +1,12 @@
 namespace backend.Services.Interfaces
 {
-    public sealed record CorreoPendiente(string Para, string Asunto, string Html);
+    public sealed record AdjuntoCorreo(string Nombre, string TipoContenido, byte[] Contenido);
+
+    public sealed record CorreoPendiente(
+        string Para,
+        string Asunto,
+        string Html,
+        IReadOnlyList<AdjuntoCorreo>? Adjuntos = null);
 
     public interface IColaCorreos
     {

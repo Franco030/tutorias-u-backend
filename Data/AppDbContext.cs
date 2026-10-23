@@ -7,10 +7,6 @@ namespace backend.Data;
 
 public partial class AppDbContext : DbContext
 {
-    public AppDbContext()
-    {
-    }
-
     public AppDbContext(DbContextOptions<AppDbContext> options)
         : base(options)
     {
@@ -60,6 +56,8 @@ public partial class AppDbContext : DbContext
         {
             entity.HasKey(e => e.Id).HasName("PK__Citas__3214EC07B5DF2F7A");
 
+            entity.HasIndex(e => e.FechaHoraInicio, "IX_Citas_Aceptadas_Fecha").HasFilter("([Estado]='Aceptada')");
+
             entity.HasIndex(e => new { e.EstudianteId, e.FechaHoraInicio }, "IX_Citas_EstudianteId");
 
             entity.HasIndex(e => new { e.TutorId, e.FechaHoraInicio }, "IX_Citas_TutorId");
@@ -75,6 +73,8 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(255)
                 .IsUnicode(false);
             entity.Property(e => e.Notas).IsUnicode(false);
+            entity.Property(e => e.RecordatorioDiaEnviado).HasPrecision(0);
+            entity.Property(e => e.RecordatorioHoraEnviado).HasPrecision(0);
             entity.Property(e => e.Tema).HasMaxLength(500);
 
             entity.HasOne(d => d.Estudiante).WithMany(p => p.CitaEstudiantes)

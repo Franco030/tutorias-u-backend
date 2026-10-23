@@ -11,7 +11,7 @@ El cliente web está en el repositorio `tutorias-u-frontend`.
 | Estudiante | Registro e inicio de sesión (correo, Google o Microsoft), selección de intereses, tutores recomendados, catálogo y perfil público de tutores, reserva de citas con tema opcional, cancelación con motivo, historial y reseñas de 1 a 5 estrellas. |
 | Tutor | Postulación con comprobante, horario semanal, días bloqueados, antelación mínima para reservar, enlace de videollamada fijo, aceptación y rechazo de solicitudes, gestión de materias. |
 | Administrador | Revisión de postulaciones con acceso temporal al comprobante, aprobación y rechazo con motivo. |
-| Sistema | Correos transaccionales (solicitud, confirmación, cancelación, rechazo y resultado de la postulación), cálculo del promedio de calificaciones y marcado de sesiones completadas. |
+| Sistema | Correos transaccionales (solicitud, confirmación, cancelación, rechazo y resultado de la postulación), recordatorios un día y una hora antes de cada cita con archivo de calendario (.ics), cálculo del promedio de calificaciones y marcado de sesiones completadas. |
 
 ## Tecnologías
 
@@ -32,7 +32,6 @@ backend/
 ├── Authorization/      Políticas de autorización (TutorAprobado)
 ├── Controllers/        Endpoints de la API
 ├── Data/               AppDbContext generado por scaffold
-├── Database/           Scripts SQL idempotentes para cambios de esquema
 ├── DTOs/               Contratos de entrada y salida
 ├── Enums/              Estados de aprobación
 ├── Middleware/         ProblemDetails en español y límite de intentos
@@ -63,6 +62,7 @@ La configuración local va en `appsettings.Development.json`, que está excluido
 | `AZURE_STORAGE_CONNECTION_STRING` | Almacenamiento de comprobantes. Debe incluir `AccountKey` para poder generar URLs firmadas. |
 | `ZonaHoraria` | Zona horaria de la universidad (IANA). Por defecto `America/Mexico_City`. Todas las fechas de citas se interpretan en esta zona. |
 | `LimiteAcceso:PorMinuto` | Intentos por minuto y por IP en inicio de sesión y registro. Por defecto 10. |
+| `Recordatorios:Activos`, `Recordatorios:IntervaloMinutos` | Servicio de recordatorios de citas. Activo por defecto; revisa cada 5 minutos. |
 
 ## Ejecución local
 
@@ -85,10 +85,7 @@ Las pruebas no necesitan SQL Server ni servicios de Azure: usan una base de dato
 
 El modelo es database-first: el esquema se modifica en SQL Server y las clases de `Models/` y `Data/AppDbContext.cs` se regeneran con scaffold.
 
-1. Ejecuta los scripts de `Database/` que falten. Son idempotentes y se pueden volver a ejecutar sin efectos secundarios:
-   - `intereses_estudiante.sql`: catálogo de materias e intereses de los estudiantes.
-   - `indices_citas_resenas.sql`: índices de citas y reseñas, e índice único contra la doble reserva.
-   - `flujo_reservas.sql`: días bloqueados, antelación mínima, enlace fijo del tutor y tema de la cita.
+1. Aplica el cambio de esquema en la base de desarrollo. Para llevarlo a producción, compara los esquemas de ambas bases (comparación de esquemas de SQL Server) y aplica las diferencias.
 2. Regenera el modelo:
 
 ```bash
@@ -118,6 +115,7 @@ Todas las rutas están bajo `/api`. Salvo las de autenticación y el catálogo p
 - **Fechas y horas:** las citas y la disponibilidad se guardan en la hora local de la plataforma, sin zona. Toda comparación con "ahora" se hace con `IHoraPlataforma`, nunca con `DateTime.UtcNow`.
 - **Autorización:** los endpoints de tutor usan la política `TutorAprobado`, que exige el rol `Tutor` y una postulación aprobada en la base de datos, no solo el rol del token.
 - **Correos:** los controladores encolan los avisos después de guardar en la base de datos. Una falla del servicio de correo se registra y nunca revierte la operación.
+- **Recordatorios:** `ServicioRecordatorios` revisa cada pocos minutos las citas aceptadas y avisa al estudiante y al tutor entre 24 y 3 horas antes y en la hora previa. Cada envío queda marcado en la cita antes de encolarse, así que nunca se duplica.
 - **Archivos:** el tipo de archivo se valida por su firma (los primeros bytes) y el contenedor lo decide el servidor.
 
 ## Despliegue
@@ -125,6 +123,7 @@ Todas las rutas están bajo `/api`. Salvo las de autenticación y el catálogo p
 - Cada pull request hacia `main` ejecuta el flujo **Backend CI** (compilación y pruebas).
 - Cada fusión en `main` ejecuta el flujo de despliegue: compila, publica para `linux-x64` y despliega en Azure App Service con ZIP Deploy.
 - El App Service usa la pila .NET 10 en Linux con el comando de inicio `dotnet backend.dll`.
+- **Always On** debe estar activado en el App Service: sin él la aplicación se duerme sin tráfico y los recordatorios no se envían a tiempo.
 - Para comprobar un despliegue, `GET /api/auth/sesion` sin token debe responder `401` con `application/problem+json`.
 
 Infraestructura en Azure (grupo de recursos `rg-tutoriasu`): App Service, Azure SQL Database, Storage Account y Communication Services con dominio de correo propio.
