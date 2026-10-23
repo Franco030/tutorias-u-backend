@@ -158,20 +158,12 @@ namespace backend.Services
             _context.Usuarios.Add(usuario);
             await _context.SaveChangesAsync();
 
-            var tokenVerificacion = GenerarTokenVerificacion(usuario);
-
-            var frontendUrl = _configuration["FrontendUrl"] ?? throw new InvalidOperationException("La variable FrontendUrl no esta configurada");
-
-            string link = $"{frontendUrl}/verificar-correo?token={tokenVerificacion}";
-
-            string html = $"<h2>Bienvenido a TutoriasU, {System.Net.WebUtility.HtmlEncode(usuario.Nombre)}!</h2>" +
-                          $"<p>Por favor verifica tu cuenta haciendo clic en el siguiente enlace:</p>" +
-                          $"<a href='{link}'>Verificar mi cuenta</a>";
+            var html = RecuperacionCuenta.CorreoDeVerificacion(_configuration, usuario.Nombre, usuario.Email);
 
 
             try
             {
-                await _emailService.SendEmailAsync(usuario.Email, "Verifica tu cuenta - Tutoriasu", html);
+                await _emailService.SendEmailAsync(usuario.Email, RecuperacionCuenta.AsuntoVerificacion, html);
             }
             catch (Exception)
             {
@@ -195,7 +187,7 @@ namespace backend.Services
                 throw new UnauthorizedAccessException("Credenciales incorrectas.");
 
             if (!usuario.IsEmailVerified)
-                throw new UnauthorizedAccessException("Por favor verifica tu correo electrónico antes de iniciar sesión.");
+                throw new CorreoSinVerificarException();
 
             var token = GenerateJwtToken(usuario);
 
@@ -214,32 +206,10 @@ namespace backend.Services
 
         public async Task VerifyEmailAsync(string verificationToken)
         {
-            var handler = new JwtSecurityTokenHandler();
-            var keyString = _configuration["Jwt:Key"] ?? throw new Exception("Llave JWT no configurada");
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
-
             try
             {
-                // Solo tokens de verificación: un token de sesión no sirve aquí
-                // (otra audiencia) y uno de verificación no sirve como sesión.
-                handler.ValidateToken(verificationToken, new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = key,
-                    ValidateIssuer = true,
-                    ValidIssuer = _configuration["Jwt:Issuer"],
-                    ValidateAudience = true,
-                    ValidAudience = AudienciaVerificacion,
-                    ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
-                }, out SecurityToken validatedToken);
-
-                var jwtToken = (JwtSecurityToken)validatedToken;
-                if (jwtToken.Claims.FirstOrDefault(x => x.Type == ClaimProposito)?.Value != PropositoVerificacion)
-                    throw new SecurityTokenException("El token no es de verificación.");
-                var email = jwtToken.Claims.First(x => x.Type == ClaimTypes.Email).Value;
-
-                var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Email == email)
+                var contenido = TokensCuenta.Validar(_configuration, TokensCuenta.Verificacion, verificationToken);
+                var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Email == contenido.Email)
                     ?? throw new Exception("Usuario no encontrado.");
 
                 usuario.IsEmailVerified = true;
@@ -283,34 +253,6 @@ namespace backend.Services
             }
 
             return usuario;
-        }
-
-        private const string ClaimProposito = "proposito";
-        private const string PropositoVerificacion = "verificar-correo";
-
-        // Audiencia propia: el token del enlace de verificación no es aceptado
-        // por el JwtBearer de la API (que espera Jwt:Audience).
-        private string AudienciaVerificacion => $"{_configuration["Jwt:Audience"]}.verificacion";
-
-        // Token del enlace de verificación: solo sirve para verificar el
-        // correo y vence en 24 h (el de sesión dura días y abre la API).
-        private string GenerarTokenVerificacion(Usuario usuario)
-        {
-            var keyString = _configuration["Jwt:Key"] ?? throw new InvalidOperationException("La clave 'Jwt:Key' no esta configurada.");
-            var creds = new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString)), SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: _configuration["Jwt:Issuer"],
-                audience: AudienciaVerificacion,
-                claims: new[]
-                {
-                    new Claim(ClaimTypes.Email, usuario.Email),
-                    new Claim(ClaimProposito, PropositoVerificacion)
-                },
-                expires: DateTime.UtcNow.AddHours(24),
-                signingCredentials: creds);
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         private string GenerateJwtToken(Usuario usuario)

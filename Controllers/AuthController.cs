@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using backend.DTOs.Requests;
+using backend.Services;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
@@ -93,6 +94,13 @@ public class AuthController : ControllerBase
             var result = await _authService.LoginWithEmailAsync(dto);
             return Ok(result);
         }
+        catch (CorreoSinVerificarException ex)
+        {
+            // Código propio para que el cliente ofrezca reenviar el correo de verificación.
+            var problema = ProblemDetailsFactory.CreateProblemDetails(HttpContext, StatusCodes.Status403Forbidden, ex.Message);
+            problema.Extensions["codigo"] = "correo-sin-verificar";
+            return new ObjectResult(problema) { StatusCode = StatusCodes.Status403Forbidden };
+        }
         catch (UnauthorizedAccessException ex)
         {
             return Problem(statusCode: 401, title: ex.Message);
@@ -117,6 +125,48 @@ public class AuthController : ControllerBase
         {
             return Problem(statusCode: 400, title: ex.Message);
         }
+    }
+
+    // Responde igual exista o no la cuenta: no revela qué correos están registrados.
+    [HttpPost("recuperar-contrasena")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
+    public async Task<IActionResult> RecuperarContrasena(
+        [FromBody] CorreoCuentaDto dto,
+        [FromServices] RecuperacionCuenta recuperacion,
+        CancellationToken cancellationToken)
+    {
+        await recuperacion.SolicitarRestablecimientoAsync(dto.Email, cancellationToken);
+        return Ok(new { message = "Si hay una cuenta con ese correo, te enviamos un enlace para restablecer la contraseña." });
+    }
+
+    [HttpPost("restablecer-contrasena")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
+    public async Task<IActionResult> RestablecerContrasena(
+        [FromBody] RestablecerContrasenaDto dto,
+        [FromServices] RecuperacionCuenta recuperacion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await recuperacion.RestablecerAsync(dto.Token, dto.Password, cancellationToken);
+            return Ok(new { message = "Tu contraseña cambió. Ya puedes iniciar sesión con la nueva." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(statusCode: 400, title: ex.Message);
+        }
+    }
+
+    // Responde igual exista o no la cuenta, y aunque ya esté verificada.
+    [HttpPost("reenviar-verificacion")]
+    [EnableRateLimiting(LimiteAcceso.Politica)]
+    public async Task<IActionResult> ReenviarVerificacion(
+        [FromBody] CorreoCuentaDto dto,
+        [FromServices] RecuperacionCuenta recuperacion,
+        CancellationToken cancellationToken)
+    {
+        await recuperacion.ReenviarVerificacionAsync(dto.Email, cancellationToken);
+        return Ok(new { message = "Si tu cuenta sigue sin verificar, te enviamos un correo nuevo." });
     }
 
     [HttpGet("sesion")]
