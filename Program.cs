@@ -7,6 +7,8 @@ using backend.Services;
 using backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+// Comprueba los tokens de Google y Microsoft (firma, vigencia y que sean para esta app).
+builder.Services.AddSingleton<IConfigurationManager<OpenIdConnectConfiguration>>(_ =>
+    new ConfigurationManager<OpenIdConnectConfiguration>(
+        VerificadorCuentasExternas.MetadatosMicrosoft,
+        new OpenIdConnectConfigurationRetriever(),
+        new HttpDocumentRetriever()));
+builder.Services.AddHttpClient<IVerificadorCuentasExternas, VerificadorCuentasExternas>();
 // Restablecer la contraseña y reenviar la verificación (correos por la cola).
 builder.Services.AddScoped<RecuperacionCuenta>();
 builder.Services.AddScoped<IEmailService, EmailService>();

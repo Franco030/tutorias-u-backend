@@ -121,7 +121,7 @@ public class RecuperacionCuentaTests
         Assert.Equal(RecuperacionCuenta.AsuntoVerificacion, correo.Asunto);
 
         // El enlace nuevo verifica la cuenta.
-        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>());
+        var auth = new AuthService(context, Config(), Mock.Of<IEmailService>(), Mock.Of<IVerificadorCuentasExternas>());
         await auth.VerifyEmailAsync(TokenDelEnlace(correo, "/verificar-correo"));
         Assert.True((await context.Usuarios.FindAsync(1))!.IsEmailVerified);
     }
