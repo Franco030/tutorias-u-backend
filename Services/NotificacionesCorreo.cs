@@ -160,6 +160,37 @@ namespace backend.Services
                 });
         }
 
+        public void SesionImpartida(DatosCitaCorreo cita) => Enviar(
+            cita.EstudianteEmail,
+            $"¿Cómo te fue en tu tutoría de {cita.Materia}?",
+            "SesionImpartida",
+            new()
+            {
+                ["Titulo"] = "Califica tu tutoría",
+                ["Preencabezado"] = $"{cita.TutorNombre} confirmó tu sesión de {cita.Materia}. Cuéntanos cómo te fue.",
+                ["EstudianteNombre"] = cita.EstudianteNombre,
+                ["TutorNombre"] = cita.TutorNombre,
+                ["Materia"] = cita.Materia,
+                ["Fecha"] = FormatearFecha(cita.FechaHoraInicio),
+                ["UrlBoton"] = Url("/mis-tutorias")
+            });
+
+        public void InasistenciaRegistrada(DatosCitaCorreo cita) => Enviar(
+            cita.EstudianteEmail,
+            $"No te conectaste a tu tutoría de {cita.Materia}",
+            "Inasistencia",
+            new()
+            {
+                ["Titulo"] = "Tutoría sin asistencia",
+                ["Preencabezado"] = $"{cita.TutorNombre} registró que no te conectaste a la sesión de {cita.Materia}.",
+                ["EstudianteNombre"] = cita.EstudianteNombre,
+                ["TutorNombre"] = cita.TutorNombre,
+                ["Materia"] = cita.Materia,
+                ["Fecha"] = FormatearFecha(cita.FechaHoraInicio),
+                ["UrlBoton"] = Url("/tutores"),
+                ["UrlAyuda"] = Url("/ayuda")
+            });
+
         public void TutorAprobado(string nombre, string email) => Enviar(
             email,
             "Tu postulación como tutor fue aprobada",

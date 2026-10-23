@@ -399,7 +399,8 @@ public class CitasControllerTests
                 EstudianteId = 1,
                 MateriaId = 1,
                 Estado = "Aceptada",
-                FechaHoraInicio = DateTime.UtcNow.AddHours(-2),
+                // Terminó hace más que el plazo de confirmación del tutor (3 días).
+                FechaHoraInicio = DateTime.UtcNow.AddDays(-4),
                 Estudiante = estudiante,
                 Tutor = tutor,
                 Materia = materia
@@ -440,7 +441,7 @@ public class CitasControllerTests
             EstudianteId = 1,
             MateriaId = 1,
             Estado = "Aceptada",
-            FechaHoraInicio = DateTime.UtcNow.AddDays(1)
+            FechaHoraInicio = DateTime.UtcNow.AddHours(-2)
         });
         await context.SaveChangesAsync();
 
