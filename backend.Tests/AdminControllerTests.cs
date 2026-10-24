@@ -8,6 +8,11 @@ using backend.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel.DataAnnotations;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 
 namespace backend.Tests;
 
@@ -218,5 +223,69 @@ public class AdminControllerTests
         blob.Setup(b => b.GenerarUrlLectura(It.IsAny<string?>(), It.IsAny<TimeSpan>()))
             .Returns((string? url, TimeSpan _) => url);
         return blob.Object;
+    }
+}
+
+// Rechazar pasando por HTTP: la lectura del cuerpo (y su validación) no corre
+// cuando se llama al controlador directamente. Ahí estaba el error 500.
+public class AdminApiTests
+{
+    private static async Task<(ApiDePrueba Api, HttpClient Cliente)> ComoAdministrador()
+    {
+        var api = new ApiDePrueba();
+        using var scope = api.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        context.Usuarios.AddRange(
+            new Usuario { Id = 1, Email = "admin@example.com", Nombre = "Coordinación", Rol = "Administrador", AuthProvider = "Local", IsEmailVerified = true, EstadoAprobacionId = (int)EstadoAprobacion.Ninguno },
+            new Usuario { Id = 30, Email = "lu@example.com", Nombre = "Lucía", Rol = "Estudiante", AuthProvider = "Local", IsEmailVerified = true, EstadoAprobacionId = (int)EstadoAprobacion.Pendiente });
+        await context.SaveChangesAsync();
+        var sesion = await scope.ServiceProvider.GetRequiredService<IAuthService>().RefrescarSesionAsync(1);
+        var cliente = api.CreateClient();
+        cliente.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sesion.Token);
+        return (api, cliente);
+    }
+
+    [Fact]
+    public async Task Rechazar_ConMotivo_Responde204YCambiaElEstado()
+    {
+        var (api, cliente) = await ComoAdministrador();
+        using var _ = api;
+
+        var respuesta = await cliente.PutAsJsonAsync("/api/admin/tutores/30/rechazar", new { motivo = "Comprobante ilegible" });
+
+        Assert.Equal(HttpStatusCode.NoContent, respuesta.StatusCode);
+        using var scope = api.Services.CreateScope();
+        var lucia = await scope.ServiceProvider.GetRequiredService<AppDbContext>().Usuarios.FindAsync(30);
+        Assert.Equal((int)EstadoAprobacion.Rechazado, lucia!.EstadoAprobacionId);
+    }
+
+    [Fact]
+    public async Task Rechazar_ConMotivoDemasiadoLargo_Responde400EnEspanol()
+    {
+        var (api, cliente) = await ComoAdministrador();
+        using var _ = api;
+
+        var respuesta = await cliente.PutAsJsonAsync("/api/admin/tutores/30/rechazar", new { motivo = new string('x', 501) });
+
+        Assert.Equal(HttpStatusCode.BadRequest, respuesta.StatusCode);
+        Assert.Contains("500 caracteres", await respuesta.Content.ReadAsStringAsync());
+    }
+
+    // En un record posicional, la validación con "property:" hace que ASP.NET
+    // lance un error al leer el cuerpo: ningún DTO debe tenerla.
+    [Fact]
+    public void RecordsPosicionales_NoValidanEnLasPropiedades()
+    {
+        var conProblema =
+            from tipo in typeof(Program).Assembly.GetTypes()
+            where tipo.Namespace?.StartsWith("backend.DTOs") == true
+            let constructor = tipo.GetConstructors().FirstOrDefault(c => c.GetParameters().Length > 0)
+            where constructor != null && tipo.GetMethod("<Clone>$") != null
+            from parametro in constructor.GetParameters()
+            let propiedad = tipo.GetProperty(parametro.Name!)
+            where propiedad != null && propiedad.GetCustomAttributes(typeof(ValidationAttribute), true).Length > 0
+            select $"{tipo.Name}.{propiedad.Name}";
+
+        Assert.Empty(conProblema);
     }
 }
